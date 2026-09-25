@@ -1343,7 +1343,7 @@ try {
     if ($updates.Count -gt 0) {
 
         $collection =
-            New-Object Microsoft.Update.UpdateColl
+            New-Object -ComObject Microsoft.Update.UpdateColl
 
         foreach ($update in $updates) {
 

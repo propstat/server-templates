@@ -173,12 +173,47 @@ Write-Log "============================================================" Cyan
 # NETWORK TEST
 # ============================================================
 
+# Connectivity target: Cloudflare DNS over HTTPS port.
+$NetworkTestHost = "1.1.1.1"
+$NetworkTestPort = 443
+
+# The test message is only shown the first time.
+$script:NetworkTestAnnounced = $false
+
+function Test-TcpPort {
+
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$HostName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Port,
+
+        [int]$TimeoutMilliseconds = 3000
+    )
+
+    # Plain TCP connect instead of Test-NetConnection: no progress
+    # banner, and a failed attempt returns after the timeout.
+    $client = New-Object System.Net.Sockets.TcpClient
+
+    try {
+        return $client.ConnectAsync($HostName, $Port).Wait($TimeoutMilliseconds) -and
+               $client.Connected
+    }
+    catch {
+        return $false
+    }
+    finally {
+        $client.Dispose()
+    }
+}
+
 function Test-ActiveNetwork {
 
-    # Test-NetConnection draws a progress banner that PowerShell 7
-    # never clears, so it would stay on screen for the rest of the
-    # script. Progress output is disabled for this function only.
-    $ProgressPreference = "SilentlyContinue"
+    if (-not $script:NetworkTestAnnounced) {
+        Write-Log "Testing Internet connectivity ($NetworkTestHost port $NetworkTestPort)..."
+        $script:NetworkTestAnnounced = $true
+    }
 
     $adapters = @(
         Get-NetAdapter -ErrorAction SilentlyContinue |
@@ -205,18 +240,39 @@ function Test-ActiveNetwork {
             continue
         }
 
-        try {
-            if (
-                Test-NetConnection `
-                    -ComputerName "fedorapeople.org" `
-                    -Port 443 `
-                    -InformationLevel Quiet `
-                    -WarningAction SilentlyContinue
-            ) {
-                return $true
-            }
+        if (Test-TcpPort -HostName $NetworkTestHost -Port $NetworkTestPort) {
+            return $true
         }
-        catch {}
+    }
+
+    return $false
+}
+
+# DNS test target: the host all downloads come from.
+$DnsTestHost = "raw.githubusercontent.com"
+
+function Test-DnsResolution {
+
+    param(
+        [string]$HostName = $DnsTestHost,
+
+        [int]$TimeoutMilliseconds = 5000
+    )
+
+    Write-Log "Testing DNS resolution ($HostName)..."
+
+    try {
+        $lookup = [System.Net.Dns]::GetHostAddressesAsync($HostName)
+
+        if ($lookup.Wait($TimeoutMilliseconds) -and $lookup.Result.Count -gt 0) {
+            Write-Log "  $HostName -> $(($lookup.Result | ForEach-Object IPAddressToString) -join ', ')" Green
+            return $true
+        }
+
+        Write-Log "  DNS lookup for $HostName timed out." Yellow
+    }
+    catch {
+        Write-Log "  DNS lookup for $HostName failed: $($_.Exception.GetBaseException().Message)" Yellow
     }
 
     return $false
@@ -847,6 +903,25 @@ elseif ($IsQemuVM) {
 
 if (-not (Test-ActiveNetwork)) {
     throw "Network is still unavailable after VirtIO bootstrap."
+}
+
+# Basic connectivity works (IP level). Name resolution is tested
+# separately so a DNS problem is reported as such.
+
+if (-not (Test-DnsResolution)) {
+
+    $dnsServers = @(
+        Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.ServerAddresses } |
+            ForEach-Object { "$($_.InterfaceAlias): $($_.ServerAddresses -join ', ')" }
+    )
+
+    Write-Log "Configured DNS servers:" Yellow
+    foreach ($entry in $dnsServers) {
+        Write-Log "  $entry" Yellow
+    }
+
+    throw "Internet is reachable ($NetworkTestHost) but DNS resolution of $DnsTestHost failed. Check the DNS server configuration."
 }
 
 Write-Log "Network bootstrap complete." Green

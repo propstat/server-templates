@@ -1,0 +1,9 @@
+virtIOStable: virtio-win-0.1.302-1
+virtIOLatest: virtio-win-0.1.302-1
+supportMatrix:
+  - Windows Server 2025: virtIOStable
+    Windows 7: virtio-win-0.1.189
+    Windows 10: virtIOStable
+    Windows 8: virtio-win-0.1.189
+    Windows Server 2012: virtio-win-0.1.189
+    Windows 11: virtIOStable

@@ -519,71 +519,128 @@ function Get-ExpectedSha256 {
 }
 
 # ============================================================
+# VIRTIO RELEASE SELECTION
+# ============================================================
+
+$VirtIOMirrorUrl =
+    "https://raw.githubusercontent.com/propstat/server-templates/refs/heads/main/virtio-drivers-mirror"
+
+function Get-VirtIOReleaseForOS {
+
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CompatibilityYaml,
+
+        [Parameter(Mandatory = $true)]
+        [string]$OsName
+    )
+
+    # Minimal parser for compatibilityVirtIOWin.yaml:
+    #   top-level "key: value" lines are aliases (virtIOStable, ...)
+    #   entries below "supportMatrix:" map Windows version -> release
+
+    $aliases  = @{}
+    $matrix   = [ordered]@{}
+    $inMatrix = $false
+
+    foreach ($rawLine in ($CompatibilityYaml -split "\r?\n")) {
+
+        $line = ($rawLine -replace '\s+#.*$', '').TrimEnd()
+
+        if (-not $line.Trim() -or $line.TrimStart().StartsWith("#")) {
+            continue
+        }
+
+        if ($line -match '^([^\s-][^:]*):\s*(.*)$') {
+
+            $key   = $Matches[1].Trim()
+            $value = $Matches[2].Trim().Trim('"', "'")
+
+            if ($key -eq "supportMatrix") {
+                $inMatrix = $true
+            }
+            else {
+                $inMatrix = $false
+                $aliases[$key] = $value
+            }
+
+            continue
+        }
+
+        if ($inMatrix -and $line -match '^\s*(?:-\s+)?([^:]+?)\s*:\s*(.+?)\s*$') {
+            $matrix[$Matches[1].Trim('"', "'")] = $Matches[2].Trim('"', "'")
+        }
+    }
+
+    if ($matrix.Count -eq 0) {
+        throw "compatibilityVirtIOWin.yaml contains no supportMatrix entries."
+    }
+
+    # Longest matching name wins, so e.g. "Windows Server 2012"
+    # is preferred over a shorter, more generic entry.
+
+    $osKey =
+        $matrix.Keys |
+            Sort-Object -Property Length -Descending |
+            Where-Object { $OsName -match "(?i)\b$([regex]::Escape($_))\b" } |
+            Select-Object -First 1
+
+    if (-not $osKey) {
+        throw "No VirtIO release listed for '$OsName' in compatibilityVirtIOWin.yaml."
+    }
+
+    $release = $matrix[$osKey]
+
+    if ($aliases.ContainsKey($release)) {
+        $release = $aliases[$release]
+    }
+
+    if ($release -notmatch '^virtio-win-\d+\.\d+\.\d+(-\d+)?$') {
+        throw "Invalid VirtIO release '$release' for '$osKey' in compatibilityVirtIOWin.yaml."
+    }
+
+    return [pscustomobject]@{
+        OsKey   = $osKey
+        Release = $release
+    }
+}
+
+# ============================================================
 # ONLINE VIRTIO INSTALLATION
 # ============================================================
 
 function Install-VirtIOOnline {
 
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$OsName
+    )
+
     Write-Section "VirtIO Online Installation"
 
-    $stableUrl =
-        "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/"
+    $compatibilityFile =
+        Join-Path $VirtIODirectory "compatibilityVirtIOWin.yaml"
 
-    $archiveUrl =
-        "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio"
+    Download-File `
+        -Url "$VirtIOMirrorUrl/compatibilityVirtIOWin.yaml" `
+        -Destination $compatibilityFile
 
-    # The stable-virtio redirect currently points at a different
-    # port/host (fedorapeople.org:3923) that returns HTML pages
-    # instead of files. Only the release folder name is taken from
-    # the redirect; the files are fetched from the normal archive.
+    $selection =
+        Get-VirtIOReleaseForOS `
+            -CompatibilityYaml (Get-Content -Path $compatibilityFile -Raw) `
+            -OsName $OsName
 
-    $releasePattern = 'virtio-win-\d+\.\d+\.\d+-\d+'
-    $releaseName    = $null
+    $virtioBaseUrl = "$VirtIOMirrorUrl/$($selection.Release)"
 
-    try {
-        $redirectTarget = Get-RedirectDestination -Url $stableUrl
-        Write-Log "stable-virtio redirects to:"
-        Write-Log "  $redirectTarget"
-
-        $releaseMatch = [regex]::Match($redirectTarget, $releasePattern)
-        if ($releaseMatch.Success) {
-            $releaseName = $releaseMatch.Value
-        }
-    }
-    catch {
-        Write-Log "Could not resolve stable-virtio redirect: $($_.Exception.Message)" Yellow
-    }
-
-    if (-not $releaseName) {
-
-        Write-Log "Falling back to newest release in archive-virtio listing." Yellow
-
-        $listing = (Invoke-WebRequest -Uri "$archiveUrl/" -UseBasicParsing).Content
-
-        $releaseName =
-            [regex]::Matches($listing, "href=`"($releasePattern)/`"") |
-                ForEach-Object { $_.Groups[1].Value } |
-                Sort-Object -Unique -Property {
-                    $n = [regex]::Matches($_, '\d+') | ForEach-Object { [int]$_.Value }
-                    '{0:D6}.{1:D6}.{2:D6}.{3:D6}' -f $n[0], $n[1], $n[2], $n[3]
-                } |
-                Select-Object -Last 1
-
-        if (-not $releaseName) {
-            throw "Could not determine the current VirtIO release from $archiveUrl."
-        }
-    }
-
-    $virtioBaseUrl = "$archiveUrl/$releaseName"
-
-    Write-Log "Current VirtIO release:"
+    Write-Log "Operating system:"
+    Write-Log "  $OsName"
+    Write-Log "Matched support matrix entry:"
+    Write-Log "  $($selection.OsKey)"
+    Write-Log "VirtIO release:"
     Write-Log "  $virtioBaseUrl" Green
 
-    $msiUrl =
-        "$virtioBaseUrl/virtio-win-gt-x64.msi"
-
-    $guestToolsUrl =
-        "$virtioBaseUrl/virtio-win-guest-tools.exe"
+    $checksumFile =
+        Join-Path $VirtIODirectory "checksum"
 
     $msiFile =
         Join-Path $VirtIODirectory "virtio-win-gt-x64.msi"
@@ -595,7 +652,17 @@ function Install-VirtIOOnline {
         Join-Path $VirtIODirectory "virtio-online-install.log"
 
     Download-File `
-        -Url $msiUrl `
+        -Url "$virtioBaseUrl/checksum" `
+        -Destination $checksumFile
+
+    $checksumText =
+        Get-Content `
+            -Path $checksumFile `
+            -Raw `
+            -ErrorAction Stop
+
+    Download-File `
+        -Url "$virtioBaseUrl/virtio-win-gt-x64.msi" `
         -Destination $msiFile
 
     # A real MSI is an OLE compound file (D0 CF 11 E0 A1 B1 1A E1).
@@ -610,39 +677,44 @@ function Install-VirtIOOnline {
         throw "Downloaded file is not an MSI ($((Get-Item $msiFile).Length) bytes). Start of file: $preview"
     }
 
-    # The release CHECKSUM file only lists the RPMs (MD5), not the
-    # MSI, so the MSI is verified by its Authenticode signature.
+    # The VirtIO MSIs are not Authenticode-signed, so they are
+    # verified against the SHA-256 list in the mirror folder.
 
-    Write-Log "Verifying VirtIO MSI Authenticode signature..."
+    foreach ($file in @($msiFile, $guestToolsFile)) {
 
-    $signature =
-        Get-AuthenticodeSignature `
-            -FilePath $msiFile
+        if ($file -eq $guestToolsFile) {
+            Download-File `
+                -Url "$virtioBaseUrl/virtio-win-guest-tools.exe" `
+                -Destination $guestToolsFile
+        }
 
-    $signer =
-        $signature.SignerCertificate
+        $fileName = Split-Path -Path $file -Leaf
 
-    Write-Log "Signature status:"
-    Write-Log "  $($signature.Status)"
+        Write-Log "Verifying $fileName SHA-256..."
 
-    Write-Log "Signer:"
-    Write-Log "  $($signer.Subject)"
+        $expectedHash =
+            Get-ExpectedSha256 `
+                -ChecksumText $checksumText `
+                -FileName $fileName
 
-    Write-Log "Issuer:"
-    Write-Log "  $($signer.Issuer)"
+        $actualHash = (
+            Get-FileHash `
+                -Path $file `
+                -Algorithm SHA256
+        ).Hash.ToLowerInvariant()
 
-    Write-Log "SHA-256:"
-    Write-Log "  $((Get-FileHash -Path $msiFile -Algorithm SHA256).Hash.ToLowerInvariant())"
+        Write-Log "Expected SHA-256:"
+        Write-Log "  $expectedHash"
 
-    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "VirtIO MSI signature is not valid ($($signature.Status)): $($signature.StatusMessage) Installation refused."
+        Write-Log "Actual SHA-256:"
+        Write-Log "  $actualHash"
+
+        if ($actualHash -ne $expectedHash) {
+            throw "$fileName SHA-256 verification FAILED. Installation refused."
+        }
+
+        Write-Log "SHA-256 verification successful." Green
     }
-
-    if ($signer.Subject -notmatch '(?i)\bO="?Red Hat') {
-        throw "VirtIO MSI is signed by an unexpected publisher: $($signer.Subject). Installation refused."
-    }
-
-    Write-Log "Signature verification successful." Green
 
     Write-Log "Installing VirtIO Guest Tools MSI..."
 
@@ -667,14 +739,8 @@ function Install-VirtIOOnline {
 
     Write-Log "VirtIO MSI installation completed." Green
 
-    # The guest tools executable is downloaded but not
-    # automatically installed.
-    Write-Log "Downloading QEMU Guest Tools..."
-
-    Download-File `
-        -Url $guestToolsUrl `
-        -Destination $guestToolsFile
-
+    # The guest tools executable is downloaded and verified but
+    # not automatically installed.
     Write-Log "QEMU Guest Tools saved to:"
     Write-Log "  $guestToolsFile" Green
 
@@ -687,12 +753,32 @@ function Install-VirtIOOnline {
 
 Write-Section "VirtIO / Network Bootstrap"
 
+# VirtIO drivers are only installed on QEMU/KVM guests.
+
+$computerInfo =
+    Get-ComputerInfo `
+        -Property CsManufacturer, CsModel, OsName
+
+$IsQemuVM =
+    [string]$computerInfo.CsManufacturer -match '(?i)\bQEMU\b'
+
+Write-Log "Manufacturer: $($computerInfo.CsManufacturer)"
+Write-Log "Model:        $($computerInfo.CsModel)"
+Write-Log "OS:           $($computerInfo.OsName)"
+
+if ($IsQemuVM) {
+    Write-Log "QEMU virtual machine detected. VirtIO drivers will be installed." Green
+}
+else {
+    Write-Log "Not a QEMU virtual machine. VirtIO installation skipped." Yellow
+}
+
 if (Test-ActiveNetwork) {
 
     Write-Log "Usable network connection already exists." Green
 
 }
-else {
+elseif ($IsQemuVM) {
 
     Write-Log "No usable Internet network detected." Yellow
 
@@ -722,7 +808,9 @@ if (-not (Test-ActiveNetwork)) {
 
 Write-Log "Network bootstrap complete." Green
 
-Install-VirtIOOnline
+if ($IsQemuVM) {
+    Install-VirtIOOnline -OsName $computerInfo.OsName | Out-Null
+}
 
 # ============================================================
 # 2. COMPUTER NAME
@@ -787,37 +875,78 @@ $currentTimeZone = (Get-TimeZone).Id
 
 Write-Log "Current time zone: $currentTimeZone"
 
+Write-Host ""
+Write-Host "Time zone input - any of the following is accepted:" -ForegroundColor Cyan
+Write-Host "  IANA name        Europe/Rome, America/New_York, Etc/UTC"
+Write-Host "  Windows ID       W. Europe Standard Time, Eastern Standard Time, UTC"
+Write-Host "  Part of a name   Rome, Berlin, Pacific, UTC+01"
+Write-Host "  (empty)          keep current: $currentTimeZone"
+Write-Host "A partial name that matches several time zones shows a numbered list to pick from." -ForegroundColor DarkGray
+Write-Host ""
+
 $timeZoneSearch =
     Read-Host `
-        "Enter time zone ID or part of display name (ENTER keeps current)"
+        "Time zone"
 
 if (-not [string]::IsNullOrWhiteSpace($timeZoneSearch)) {
 
-    $matches = @(
-        $timeZones |
-            Where-Object {
-                $_.Id -like "*$timeZoneSearch*" -or
-                $_.DisplayName -like "*$timeZoneSearch*"
-            }
-    )
+    $timeZoneSearch = $timeZoneSearch.Trim()
 
-    if ($matches.Count -eq 0) {
+    # Windows uses its own time zone IDs ("W. Europe Standard Time").
+    # IANA names such as "Europe/Rome" are converted first.
+
+    $windowsTimeZoneId = $null
+
+    if ($timeZoneSearch -match '/') {
+
+        if ([System.TimeZoneInfo]::TryConvertIanaIdToWindowsId(
+                $timeZoneSearch,
+                [ref]$windowsTimeZoneId)) {
+
+            Write-Log "IANA time zone $timeZoneSearch = Windows ID $windowsTimeZoneId"
+        }
+        else {
+            # Unknown to the converter: search for the city part
+            # ("Europe/Rome" -> "Rome") in the display names.
+            $timeZoneSearch = ($timeZoneSearch -split '/')[-1] -replace '_', ' '
+        }
+    }
+
+    if ($windowsTimeZoneId) {
+
+        $timeZoneMatches = @(
+            $timeZones |
+                Where-Object { $_.Id -eq $windowsTimeZoneId }
+        )
+    }
+    else {
+
+        $timeZoneMatches = @(
+            $timeZones |
+                Where-Object {
+                    $_.Id -like "*$timeZoneSearch*" -or
+                    $_.DisplayName -like "*$timeZoneSearch*"
+                }
+        )
+    }
+
+    if ($timeZoneMatches.Count -eq 0) {
         throw "No time zone matched '$timeZoneSearch'."
     }
 
-    if ($matches.Count -eq 1) {
+    if ($timeZoneMatches.Count -eq 1) {
 
-        $selectedTimeZone = $matches[0]
+        $selectedTimeZone = $timeZoneMatches[0]
 
     }
     else {
 
         Write-Host ""
 
-        for ($i = 0; $i -lt $matches.Count; $i++) {
+        for ($i = 0; $i -lt $timeZoneMatches.Count; $i++) {
 
             Write-Host `
-                "[$($i + 1)] $($matches[$i].Id) - $($matches[$i].DisplayName)"
+                "[$($i + 1)] $($timeZoneMatches[$i].Id) - $($timeZoneMatches[$i].DisplayName)"
         }
 
         do {
@@ -837,11 +966,11 @@ if (-not [string]::IsNullOrWhiteSpace($timeZoneSearch)) {
         while (
             -not $valid -or
             $number -lt 1 -or
-            $number -gt $matches.Count
+            $number -gt $timeZoneMatches.Count
         )
 
         $selectedTimeZone =
-            $matches[$number - 1]
+            $timeZoneMatches[$number - 1]
     }
 
     Set-TimeZone `

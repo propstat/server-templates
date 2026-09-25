@@ -470,12 +470,16 @@ function Get-ExpectedSha256 {
 
     $escapedName = [regex]::Escape($FileName)
 
+    # Optional directory prefix in front of the file name,
+    # e.g. "./", "virtio-win-0.1.285/" or "amd64\".
+    $pathPrefix = '(?:[^\s*()]*[/\\])?'
+
     # Format:
-    # HASH *filename
+    # HASH *filename   /   HASH  path/filename
 
     $match = [regex]::Match(
         $ChecksumText,
-        "(?im)^\s*([0-9a-f]{64})\s+\*?$escapedName\s*$"
+        "(?im)^\s*([0-9a-f]{64})\s+\*?$pathPrefix$escapedName\s*$"
     )
 
     if ($match.Success) {
@@ -483,11 +487,11 @@ function Get-ExpectedSha256 {
     }
 
     # Format:
-    # SHA256 (filename) = HASH
+    # SHA256 (filename) = HASH   /   SHA2-256(path/filename)= HASH
 
     $match = [regex]::Match(
         $ChecksumText,
-        "(?im)^\s*SHA256\s*\(\s*$escapedName\s*\)\s*=\s*([0-9a-f]{64})\s*$"
+        "(?im)^\s*SHA(?:2-)?256\s*\(\s*$pathPrefix$escapedName\s*\)\s*=\s*([0-9a-f]{64})\s*$"
     )
 
     if ($match.Success) {
@@ -495,15 +499,20 @@ function Get-ExpectedSha256 {
     }
 
     # Format:
-    # filename HASH
+    # filename HASH   /   path/filename: HASH
 
     $match = [regex]::Match(
         $ChecksumText,
-        "(?im)^\s*$escapedName\s+([0-9a-f]{64})\s*$"
+        "(?im)^\s*$pathPrefix$escapedName\s*:?\s+([0-9a-f]{64})\s*$"
     )
 
     if ($match.Success) {
         return $match.Groups[1].Value.ToLowerInvariant()
+    }
+
+    Write-Log "Checksum file contents (no entry matched ${FileName}):" Yellow
+    foreach ($line in ($ChecksumText -split "\r?\n")) {
+        Write-Log "  $line"
     }
 
     throw "Could not find SHA-256 checksum for $FileName."
@@ -527,17 +536,11 @@ function Install-VirtIOOnline {
     Write-Log "Current VirtIO release:"
     Write-Log "  $virtioBaseUrl" Green
 
-    $checksumUrl =
-        "$virtioBaseUrl/CHECKSUM"
-
     $msiUrl =
         "$virtioBaseUrl/virtio-win-gt-x64.msi"
 
     $guestToolsUrl =
         "$virtioBaseUrl/virtio-win-guest-tools.exe"
-
-    $checksumFile =
-        Join-Path $VirtIODirectory "CHECKSUM"
 
     $msiFile =
         Join-Path $VirtIODirectory "virtio-win-gt-x64.msi"
@@ -549,43 +552,42 @@ function Install-VirtIOOnline {
         Join-Path $VirtIODirectory "virtio-online-install.log"
 
     Download-File `
-        -Url $checksumUrl `
-        -Destination $checksumFile
-
-    Download-File `
         -Url $msiUrl `
         -Destination $msiFile
 
-    Write-Log "Verifying VirtIO MSI SHA-256..."
+    # The release CHECKSUM file only lists the RPMs (MD5), not the
+    # MSI, so the MSI is verified by its Authenticode signature.
 
-    $checksumText =
-        Get-Content `
-            -Path $checksumFile `
-            -Raw `
-            -ErrorAction Stop
+    Write-Log "Verifying VirtIO MSI Authenticode signature..."
 
-    $expectedHash =
-        Get-ExpectedSha256 `
-            -ChecksumText $checksumText `
-            -FileName "virtio-win-gt-x64.msi"
+    $signature =
+        Get-AuthenticodeSignature `
+            -FilePath $msiFile
 
-    $actualHash = (
-        Get-FileHash `
-            -Path $msiFile `
-            -Algorithm SHA256
-    ).Hash.ToLowerInvariant()
+    $signer =
+        $signature.SignerCertificate
 
-    Write-Log "Expected SHA-256:"
-    Write-Log "  $expectedHash"
+    Write-Log "Signature status:"
+    Write-Log "  $($signature.Status)"
 
-    Write-Log "Actual SHA-256:"
-    Write-Log "  $actualHash"
+    Write-Log "Signer:"
+    Write-Log "  $($signer.Subject)"
 
-    if ($actualHash -ne $expectedHash) {
-        throw "VirtIO MSI SHA-256 verification FAILED. Installation refused."
+    Write-Log "Issuer:"
+    Write-Log "  $($signer.Issuer)"
+
+    Write-Log "SHA-256:"
+    Write-Log "  $((Get-FileHash -Path $msiFile -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+        throw "VirtIO MSI signature is not valid ($($signature.Status)): $($signature.StatusMessage) Installation refused."
     }
 
-    Write-Log "SHA-256 verification successful." Green
+    if ($signer.Subject -notmatch '(?i)\bO="?Red Hat') {
+        throw "VirtIO MSI is signed by an unexpected publisher: $($signer.Subject). Installation refused."
+    }
+
+    Write-Log "Signature verification successful." Green
 
     Write-Log "Installing VirtIO Guest Tools MSI..."
 

@@ -175,6 +175,11 @@ Write-Log "============================================================" Cyan
 
 function Test-ActiveNetwork {
 
+    # Test-NetConnection draws a progress banner that PowerShell 7
+    # never clears, so it would stay on screen for the rest of the
+    # script. Progress output is disabled for this function only.
+    $ProgressPreference = "SilentlyContinue"
+
     $adapters = @(
         Get-NetAdapter -ErrorAction SilentlyContinue |
             Where-Object {
@@ -739,10 +744,48 @@ function Install-VirtIOOnline {
 
     Write-Log "VirtIO MSI installation completed." Green
 
-    # The guest tools executable is downloaded and verified but
-    # not automatically installed.
-    Write-Log "QEMU Guest Tools saved to:"
-    Write-Log "  $guestToolsFile" Green
+    # The MSI above only contains the VirtIO drivers. The QEMU guest
+    # agent (and SPICE agent) ship in the guest tools bundle, a WiX
+    # Burn installer: /install /quiet /norestart /log <file>.
+    # Components already installed by the MSI are skipped.
+
+    $guestToolsLog =
+        Join-Path $VirtIODirectory "virtio-guest-tools-install.log"
+
+    Write-Log "Installing VirtIO Guest Tools (QEMU guest agent)..."
+
+    $process = Start-Process `
+        -FilePath $guestToolsFile `
+        -ArgumentList @(
+            "/install",
+            "/quiet",
+            "/norestart",
+            "/log",
+            "`"$guestToolsLog`""
+        ) `
+        -Wait `
+        -PassThru
+
+    Write-Log "VirtIO Guest Tools exit code: $($process.ExitCode)"
+
+    if ($process.ExitCode -notin @(0, 1641, 3010)) {
+        throw "VirtIO Guest Tools installation failed with exit code $($process.ExitCode). See $guestToolsLog"
+    }
+
+    $guestAgent =
+        Get-Service -Name "QEMU-GA" -ErrorAction SilentlyContinue
+
+    if (-not $guestAgent) {
+        Write-Log "QEMU guest agent service not found after installation. See $guestToolsLog" Yellow
+    }
+    elseif ($guestAgent.Status -ne "Running") {
+        # The agent only runs when the VM has the guest agent
+        # channel enabled (Proxmox: Options > QEMU Guest Agent).
+        Write-Log "QEMU guest agent installed but $($guestAgent.Status). Enable the guest agent in the VM options." Yellow
+    }
+    else {
+        Write-Log "QEMU guest agent installed and running." Green
+    }
 
     return $true
 }

@@ -1,5 +1,30 @@
 #requires -RunAsAdministrator
 
+# ============================================================
+# POWERSHELL 7 BOOTSTRAP
+# Installs the latest PowerShell 7 if missing and re-runs
+# this script under pwsh. Everything below runs on 7+.
+# ============================================================
+
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+
+    $pwsh = Join-Path $env:ProgramFiles "PowerShell\7\pwsh.exe"
+
+    if (-not (Test-Path $pwsh)) {
+        Write-Host "PowerShell 7 not found. Installing latest release..."
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-Expression "& { $(Invoke-RestMethod -UseBasicParsing https://aka.ms/install-powershell.ps1) } -UseMSI -Quiet"
+    }
+
+    if (-not (Test-Path $pwsh)) {
+        throw "PowerShell 7 installation failed: $pwsh not found."
+    }
+
+    Write-Host "Relaunching under PowerShell 7..."
+    & $pwsh -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @args
+    exit $LASTEXITCODE
+}
+
 $ErrorActionPreference = "Stop"
 
 # ============================================================
@@ -1429,7 +1454,7 @@ Set-Content `
 
 $action =
     New-ScheduledTaskAction `
-        -Execute "powershell.exe" `
+        -Execute (Join-Path $env:ProgramFiles "PowerShell\7\pwsh.exe") `
         -Argument `
             "-NoProfile -ExecutionPolicy Bypass -File `"$postRebootScript`""
 

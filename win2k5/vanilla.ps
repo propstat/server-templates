@@ -1,0 +1,690 @@
+# ============================================================
+# VirtIO Bootstrap by Propstat
+# ============================================================
+#
+# VirtIO is handled before all other network-dependent tasks.
+#
+# If a usable network connection already exists:
+#   -> Download current VirtIO from Fedora.
+#
+# If no usable network connection exists:
+#   -> Search CD/DVD drives for VirtIO drivers.
+#   -> Install the drivers found there.
+#   -> Recheck networking.
+#   -> If no CD is found, ask the user to insert one.
+#
+# Once networking is available:
+#   -> Determine current VirtIO release from Fedora redirect.
+#   -> Download CHECKSUM.
+#   -> Download virtio-win-gt-x64.msi.
+#   -> Verify SHA256.
+#   -> Install MSI silently.
+#   -> Download virtio-win-guest-tools.exe.
+# ============================================================
+
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host " VirtIO Network Driver Bootstrap" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
+
+$virtioStableUrl = `
+    "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/"
+
+$virtioDownloadDirectory = `
+    "$env:ProgramData\VirtIO"
+
+$virtioChecksumFile = `
+    Join-Path $virtioDownloadDirectory "CHECKSUM"
+
+$virtioMsiFile = `
+    Join-Path $virtioDownloadDirectory "virtio-win-gt-x64.msi"
+
+$virtioGuestToolsFile = `
+    Join-Path $virtioDownloadDirectory "virtio-win-guest-tools.exe"
+
+New-Item `
+    -ItemType Directory `
+    -Path $virtioDownloadDirectory `
+    -Force |
+    Out-Null
+
+
+# ------------------------------------------------------------
+# Function: Test for active network connectivity
+# ------------------------------------------------------------
+
+function Test-ActiveNetwork {
+
+    $adapters = @(
+        Get-NetAdapter -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.Status -eq "Up" -and
+                $_.HardwareInterface -eq $true
+            }
+    )
+
+    foreach ($adapter in $adapters) {
+
+        $ipAddresses = @(
+            Get-NetIPAddress `
+                -InterfaceIndex $adapter.ifIndex `
+                -AddressFamily IPv4 `
+                -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.IPAddress -notlike "169.254.*" -and
+                    $_.IPAddress -notlike "127.*"
+                }
+        )
+
+        if ($ipAddresses.Count -gt 0) {
+
+            # First test the network stack itself.
+            $networkTest = Test-NetConnection `
+                -ComputerName "fedorapeople.org" `
+                -Port 443 `
+                -InformationLevel Quiet `
+                -WarningAction SilentlyContinue `
+                -ErrorAction SilentlyContinue
+
+            if ($networkTest) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+
+# ------------------------------------------------------------
+# Function: Find VirtIO CD/DVD media
+# ------------------------------------------------------------
+
+function Find-VirtIOCD {
+
+    Write-Host ""
+    Write-Host "Searching CD/DVD drives for VirtIO media..." `
+        -ForegroundColor Yellow
+
+    $cdromDrives = @(
+        Get-CimInstance Win32_CDROMDrive `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.Drive -and
+                (Test-Path $_.Drive)
+            }
+    )
+
+    foreach ($drive in $cdromDrives) {
+
+        $root = $drive.Drive.TrimEnd('\')
+
+        Write-Host "Checking $root ..." -ForegroundColor DarkGray
+
+        # The official VirtIO ISO contains this MSI.
+        $msiCandidates = @(
+            Get-ChildItem `
+                -Path $root `
+                -Filter "virtio-win-gt-x64.msi" `
+                -File `
+                -Recurse `
+                -ErrorAction SilentlyContinue
+        )
+
+        if ($msiCandidates.Count -gt 0) {
+
+            return @{
+                Drive = $root
+                Msi   = $msiCandidates[0].FullName
+            }
+        }
+
+        # Also look for the characteristic VirtIO driver
+        # directories in case only the drivers are present.
+        $driverDirectories = @(
+            Get-ChildItem `
+                -Path $root `
+                -Directory `
+                -Recurse `
+                -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.Name -in @(
+                        "NetKVM",
+                        "viostor",
+                        "vioscsi",
+                        "virtiofs"
+                    )
+                }
+        )
+
+        if ($driverDirectories.Count -gt 0) {
+
+            return @{
+                Drive = $root
+                Msi   = $null
+            }
+        }
+    }
+
+    return $null
+}
+
+
+# ------------------------------------------------------------
+# Function: Install VirtIO drivers from CD
+# ------------------------------------------------------------
+
+function Install-VirtIOFromCD {
+
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Media
+    )
+
+    $root = $Media.Drive
+
+    Write-Host ""
+    Write-Host "VirtIO media found in $root" -ForegroundColor Green
+
+    # --------------------------------------------------------
+    # Preferred method: install the official MSI if present.
+    # This installs the complete VirtIO driver package.
+    # --------------------------------------------------------
+
+    if ($Media.Msi) {
+
+        Write-Host ""
+        Write-Host "Found:"
+        Write-Host "  $($Media.Msi)"
+
+        Write-Host ""
+        Write-Host "Installing VirtIO drivers from CD..." `
+            -ForegroundColor Yellow
+
+        $process = Start-Process `
+            -FilePath "msiexec.exe" `
+            -ArgumentList @(
+                "/i"
+                "`"$($Media.Msi)`""
+                "/qn"
+                "/norestart"
+                "/L*v"
+                "`"$virtioDownloadDirectory\virtio-cd-install.log`""
+            ) `
+            -Wait `
+            -PassThru
+
+        if ($process.ExitCode -notin @(0, 3010)) {
+
+            Write-Host ""
+            Write-Host `
+                "VirtIO MSI returned exit code $($process.ExitCode)." `
+                -ForegroundColor Red
+
+            return $false
+        }
+
+        Write-Host ""
+        Write-Host `
+            "VirtIO drivers installed from CD." `
+            -ForegroundColor Green
+
+        return $true
+    }
+
+    # --------------------------------------------------------
+    # Fallback: install INF drivers directly.
+    #
+    # This is useful if the supplied CD contains the driver
+    # directories but not the MSI.
+    # --------------------------------------------------------
+
+    Write-Host ""
+    Write-Host "VirtIO MSI was not found." -ForegroundColor Yellow
+    Write-Host "Searching for VirtIO INF drivers..."
+
+    $infFiles = @(
+        Get-ChildItem `
+            -Path $root `
+            -Filter "*.inf" `
+            -File `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.FullName -match '\\(NetKVM|viostor|vioscsi)\\'
+            }
+    )
+
+    if ($infFiles.Count -eq 0) {
+
+        Write-Host `
+            "No VirtIO network/storage INF files were found." `
+            -ForegroundColor Red
+
+        return $false
+    }
+
+    foreach ($inf in $infFiles) {
+
+        Write-Host "Installing $($inf.FullName)" `
+            -ForegroundColor DarkGray
+
+        & pnputil.exe `
+            /add-driver $inf.FullName `
+            /install
+
+        if ($LASTEXITCODE -ne 0) {
+
+            Write-Host `
+                "Warning: pnputil returned $LASTEXITCODE." `
+                -ForegroundColor Yellow
+        }
+    }
+
+    Write-Host ""
+    Write-Host "VirtIO INF drivers processed." -ForegroundColor Green
+
+    return $true
+}
+
+
+# ------------------------------------------------------------
+# Bootstrap loop
+# ------------------------------------------------------------
+
+$networkAvailable = Test-ActiveNetwork
+
+if ($networkAvailable) {
+
+    Write-Host `
+        "An active network connection is already available." `
+        -ForegroundColor Green
+
+}
+else {
+
+    Write-Host ""
+    Write-Host `
+        "No active network connection is available." `
+        -ForegroundColor Yellow
+
+    $media = Find-VirtIOCD
+
+    while (-not $media) {
+
+        Write-Host ""
+        Write-Host "No VirtIO CD/DVD media was found." `
+            -ForegroundColor Red
+
+        Write-Host ""
+        Write-Host `
+            "Please insert the VirtIO driver CD/ISO into the"
+        Write-Host `
+            "virtual CD/DVD drive."
+        Write-Host ""
+
+        do {
+            $confirmation = Read-Host `
+                "Enter Y when the CD has been inserted, or N to abort"
+
+            $confirmation = $confirmation.Trim().ToUpper()
+
+        } while ($confirmation -notin @("Y", "N"))
+
+        if ($confirmation -eq "N") {
+
+            Write-Error `
+                "VirtIO drivers are required before continuing."
+            exit 1
+        }
+
+        # Give Windows a moment to mount the media.
+        Start-Sleep -Seconds 3
+
+        $media = Find-VirtIOCD
+
+        if (-not $media) {
+
+            Write-Host ""
+            Write-Host `
+                "No VirtIO driver media was found after the confirmation." `
+                -ForegroundColor Red
+
+            Write-Host `
+                "The script will ask again."
+        }
+    }
+
+    # Install drivers from CD.
+    $driverInstallResult = Install-VirtIOFromCD -Media $media
+
+    if (-not $driverInstallResult) {
+
+        Write-Host ""
+        Write-Error `
+            "VirtIO drivers could not be installed from the CD."
+        exit 1
+    }
+
+    # --------------------------------------------------------
+    # Give Plug and Play time to initialize the new NIC.
+    # --------------------------------------------------------
+
+    Write-Host ""
+    Write-Host `
+        "Waiting for the VirtIO network adapter to initialize..." `
+        -ForegroundColor Yellow
+
+    Start-Sleep -Seconds 10
+
+    # --------------------------------------------------------
+    # Check again for network.
+    # --------------------------------------------------------
+
+    $networkAvailable = Test-ActiveNetwork
+
+    if (-not $networkAvailable) {
+
+        Write-Host ""
+        Write-Host `
+            "No active network connection is available yet." `
+            -ForegroundColor Red
+
+        Write-Host ""
+        Write-Host `
+            "A reboot may be required to activate the VirtIO NIC." `
+            -ForegroundColor Yellow
+
+        Write-Host ""
+        Write-Host `
+            "Please verify that the VirtIO network adapter is attached"
+        Write-Host `
+            "to the VM and that the VirtIO driver was installed."
+
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host `
+        "Network connection is now available." `
+        -ForegroundColor Green
+}
+
+
+# ============================================================
+# Current VirtIO release from Fedora
+# ============================================================
+
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host " Current VirtIO Release" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
+
+
+# ------------------------------------------------------------
+# Function: Get redirect destination
+# ------------------------------------------------------------
+
+function Get-RedirectDestination {
+
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    $handler = New-Object `
+        System.Net.Http.HttpClientHandler
+
+    $handler.AllowAutoRedirect = $false
+
+    $client = New-Object `
+        System.Net.Http.HttpClient($handler)
+
+    try {
+
+        $response = $client.GetAsync(
+            $Url,
+            [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
+        ).GetAwaiter().GetResult()
+
+        $statusCode = [int]$response.StatusCode
+
+        if (
+            $statusCode -eq 301 -or
+            $statusCode -eq 302 -or
+            $statusCode -eq 303 -or
+            $statusCode -eq 307 -or
+            $statusCode -eq 308
+        ) {
+
+            $location = $response.Headers.Location
+
+            if (-not $location) {
+                throw `
+                    "Redirect response contained no Location header."
+            }
+
+            return $location.AbsoluteUri
+        }
+
+        throw `
+            "Expected an HTTP redirect but received HTTP $statusCode."
+    }
+    finally {
+
+        $client.Dispose()
+        $handler.Dispose()
+    }
+}
+
+
+Write-Host `
+    "Checking Fedora stable VirtIO redirect..." `
+    -ForegroundColor Yellow
+
+$virtioBaseUrl = Get-RedirectDestination `
+    -Url $virtioStableUrl
+
+$virtioBaseUrl = $virtioBaseUrl.TrimEnd('/')
+
+Write-Host ""
+Write-Host "Current VirtIO release:" -ForegroundColor Green
+Write-Host "  $virtioBaseUrl"
+
+
+# ============================================================
+# Download CHECKSUM
+# ============================================================
+
+$checksumUrl = "$virtioBaseUrl/CHECKSUM"
+
+Write-Host ""
+Write-Host "Downloading CHECKSUM..." -ForegroundColor Yellow
+Write-Host "  $checksumUrl"
+
+Invoke-WebRequest `
+    -Uri $checksumUrl `
+    -OutFile $virtioChecksumFile `
+    -UseBasicParsing
+
+
+# ============================================================
+# Download virtio-win-gt-x64.msi
+# ============================================================
+
+$virtioMsiUrl = `
+    "$virtioBaseUrl/virtio-win-gt-x64.msi"
+
+Write-Host ""
+Write-Host `
+    "Downloading virtio-win-gt-x64.msi..." `
+    -ForegroundColor Yellow
+
+Write-Host "  $virtioMsiUrl"
+
+Invoke-WebRequest `
+    -Uri $virtioMsiUrl `
+    -OutFile $virtioMsiFile `
+    -UseBasicParsing
+
+if (-not (Test-Path $virtioMsiFile)) {
+
+    Write-Error `
+        "virtio-win-gt-x64.msi could not be downloaded."
+
+    exit 1
+}
+
+
+# ============================================================
+# Verify SHA256
+# ============================================================
+
+Write-Host ""
+Write-Host "Verifying VirtIO MSI checksum..." -ForegroundColor Yellow
+
+$checksumText = Get-Content `
+    -LiteralPath $virtioChecksumFile `
+    -Raw
+
+$msiHash = $null
+
+foreach ($line in ($checksumText -split "`r?`n")) {
+
+    if (
+        $line -match
+        '(?i)^\s*([a-f0-9]{64})\s+\*?(.+virtio-win-gt-x64\.msi)\s*$'
+    ) {
+
+        $msiHash = $matches[1]
+        break
+    }
+
+    if (
+        $line -match
+        '(?i)^\s*SHA256\s*\(\s*virtio-win-gt-x64\.msi\s*\)\s*=\s*([a-f0-9]{64})\s*$'
+    ) {
+
+        $msiHash = $matches[1]
+        break
+    }
+
+    if (
+        $line -match
+        '(?i)^\s*virtio-win-gt-x64\.msi\s+([a-f0-9]{64})\s*$'
+    ) {
+
+        $msiHash = $matches[1]
+        break
+    }
+}
+
+if (-not $msiHash) {
+
+    Write-Error `
+        "Could not find the SHA256 checksum for virtio-win-gt-x64.msi."
+
+    exit 1
+}
+
+$actualMsiHash = (
+    Get-FileHash `
+        -LiteralPath $virtioMsiFile `
+        -Algorithm SHA256
+).Hash
+
+Write-Host ""
+Write-Host "Expected SHA256:"
+Write-Host "  $msiHash"
+
+Write-Host ""
+Write-Host "Actual SHA256:"
+Write-Host "  $actualMsiHash"
+
+if (
+    $actualMsiHash.ToUpperInvariant() -ne
+    $msiHash.ToUpperInvariant()
+) {
+
+    Write-Host ""
+    Write-Error "VirtIO MSI checksum verification FAILED."
+    exit 1
+}
+
+Write-Host ""
+Write-Host `
+    "VirtIO MSI checksum verified successfully." `
+    -ForegroundColor Green
+
+
+# ============================================================
+# Install current VirtIO MSI
+# ============================================================
+
+Write-Host ""
+Write-Host `
+    "Installing current VirtIO Guest Tools MSI..." `
+    -ForegroundColor Yellow
+
+$msiProcess = Start-Process `
+    -FilePath "msiexec.exe" `
+    -ArgumentList @(
+        "/i"
+        "`"$virtioMsiFile`""
+        "/qn"
+        "/norestart"
+        "/L*v"
+        "`"$virtioDownloadDirectory\virtio-msi-install.log`""
+    ) `
+    -Wait `
+    -PassThru
+
+if ($msiProcess.ExitCode -notin @(0, 3010)) {
+
+    Write-Error `
+        "VirtIO MSI installation failed with exit code $($msiProcess.ExitCode)."
+
+    exit $msiProcess.ExitCode
+}
+
+Write-Host ""
+Write-Host `
+    "Current VirtIO MSI installed successfully." `
+    -ForegroundColor Green
+
+
+# ============================================================
+# Download QEMU Guest Tools
+# ============================================================
+
+$virtioGuestToolsUrl = `
+    "$virtioBaseUrl/virtio-win-guest-tools.exe"
+
+Write-Host ""
+Write-Host `
+    "Downloading QEMU Guest Tools..." `
+    -ForegroundColor Yellow
+
+Write-Host "  $virtioGuestToolsUrl"
+
+Invoke-WebRequest `
+    -Uri $virtioGuestToolsUrl `
+    -OutFile $virtioGuestToolsFile `
+    -UseBasicParsing
+
+if (-not (Test-Path $virtioGuestToolsFile)) {
+
+    Write-Error `
+        "QEMU Guest Tools could not be downloaded."
+
+    exit 1
+}
+
+Write-Host ""
+Write-Host `
+    "QEMU Guest Tools downloaded successfully." `
+    -ForegroundColor Green
+
+Write-Host "  $virtioGuestToolsFile"

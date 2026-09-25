@@ -29,6 +29,7 @@ catch {
 function Write-Log {
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$Message,
 
         [ConsoleColor]$Color = [ConsoleColor]::Gray

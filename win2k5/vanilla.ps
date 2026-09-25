@@ -1,67 +1,62 @@
+#requires -RunAsAdministrator
+
+$ErrorActionPreference = "Stop"
+
 # ============================================================
-# VirtIO Bootstrap by Propstat
+# Windows Server 2025 Initial Provisioning
+#
+# Order:
+#   1. Elevation
+#   2. VirtIO bootstrap / ensure network
+#   3. Computer name
+#   4. Time zone
+#   5. Target edition selection
+#   6. Template ID
+#   7. Network configuration
+#   8. Enable RDP
+#   9. Google Chrome
+#  10. 7-Zip
+#  11. Initial Windows Update pass
+#  12. Register post-reboot Windows Update task
+#  13. DISM edition conversion
+#  14. Reboot
+#  15. Post-reboot Windows Update pass
 # ============================================================
-#
-# VirtIO is handled before all other network-dependent tasks.
-#
-# If a usable network connection already exists:
-#   -> Download current VirtIO from Fedora.
-#
-# If no usable network connection exists:
-#   -> Search CD/DVD drives for VirtIO drivers.
-#   -> Install the drivers found there.
-#   -> Recheck networking.
-#   -> If no CD is found, ask the user to insert one.
-#
-# Once networking is available:
-#   -> Determine current VirtIO release from Fedora redirect.
-#   -> Download CHECKSUM.
-#   -> Download virtio-win-gt-x64.msi.
-#   -> Verify SHA256.
-#   -> Install MSI silently.
-#   -> Download virtio-win-guest-tools.exe.
+
+
 # ============================================================
+# 1. ELEVATION
+# ============================================================
+
+$principal = New-Object Security.Principal.WindowsPrincipal(
+    [Security.Principal.WindowsIdentity]::GetCurrent()
+)
+
+if (-not $principal.IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator
+)) {
+    Write-Host "This script must be run as Administrator." -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host " VirtIO Network Driver Bootstrap" -ForegroundColor Cyan
-Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "Windows Server 2025 Initial Provisioning" -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$virtioStableUrl = `
-    "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/"
 
-$virtioDownloadDirectory = `
-    "$env:ProgramData\VirtIO"
-
-$virtioChecksumFile = `
-    Join-Path $virtioDownloadDirectory "CHECKSUM"
-
-$virtioMsiFile = `
-    Join-Path $virtioDownloadDirectory "virtio-win-gt-x64.msi"
-
-$virtioGuestToolsFile = `
-    Join-Path $virtioDownloadDirectory "virtio-win-guest-tools.exe"
-
-New-Item `
-    -ItemType Directory `
-    -Path $virtioDownloadDirectory `
-    -Force |
-    Out-Null
-
-
-# ------------------------------------------------------------
-# Function: Test for active network connectivity
-# ------------------------------------------------------------
+# ============================================================
+# Helper: Test whether Internet networking is usable
+# ============================================================
 
 function Test-ActiveNetwork {
 
     $adapters = @(
         Get-NetAdapter -ErrorAction SilentlyContinue |
-            Where-Object {
-                $_.Status -eq "Up" -and
-                $_.HardwareInterface -eq $true
-            }
+        Where-Object {
+            $_.Status -eq "Up" -and
+            $_.HardwareInterface -eq $true
+        }
     )
 
     foreach ($adapter in $adapters) {
@@ -71,25 +66,27 @@ function Test-ActiveNetwork {
                 -InterfaceIndex $adapter.ifIndex `
                 -AddressFamily IPv4 `
                 -ErrorAction SilentlyContinue |
-                Where-Object {
-                    $_.IPAddress -notlike "169.254.*" -and
-                    $_.IPAddress -notlike "127.*"
-                }
+            Where-Object {
+                $_.IPAddress -notlike "169.254.*" -and
+                $_.IPAddress -notlike "127.*"
+            }
         )
 
-        if ($ipAddresses.Count -gt 0) {
+        if ($ipAddresses.Count -eq 0) {
+            continue
+        }
 
-            # First test the network stack itself.
-            $networkTest = Test-NetConnection `
+        try {
+            if (Test-NetConnection `
                 -ComputerName "fedorapeople.org" `
                 -Port 443 `
                 -InformationLevel Quiet `
-                -WarningAction SilentlyContinue `
-                -ErrorAction SilentlyContinue
+                -WarningAction SilentlyContinue) {
 
-            if ($networkTest) {
                 return $true
             }
+        }
+        catch {
         }
     }
 
@@ -97,350 +94,256 @@ function Test-ActiveNetwork {
 }
 
 
-# ------------------------------------------------------------
-# Function: Find VirtIO CD/DVD media
-# ------------------------------------------------------------
+# ============================================================
+# Helper: Wait for network
+# ============================================================
 
-function Find-VirtIOCD {
+function Wait-ForNetwork {
 
-    Write-Host ""
-    Write-Host "Searching CD/DVD drives for VirtIO media..." `
-        -ForegroundColor Yellow
-
-    $cdromDrives = @(
-        Get-CimInstance Win32_CDROMDrive `
-            -ErrorAction SilentlyContinue |
-            Where-Object {
-                $_.Drive -and
-                (Test-Path $_.Drive)
-            }
+    param(
+        [int]$TimeoutSeconds = 60
     )
 
-    foreach ($drive in $cdromDrives) {
+    Write-Host "Waiting for network connectivity..." -ForegroundColor Yellow
 
-        $root = $drive.Drive.TrimEnd('\')
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 
-        Write-Host "Checking $root ..." -ForegroundColor DarkGray
+    while ((Get-Date) -lt $deadline) {
 
-        # The official VirtIO ISO contains this MSI.
-        $msiCandidates = @(
-            Get-ChildItem `
-                -Path $root `
-                -Filter "virtio-win-gt-x64.msi" `
-                -File `
-                -Recurse `
-                -ErrorAction SilentlyContinue
-        )
-
-        if ($msiCandidates.Count -gt 0) {
-
-            return @{
-                Drive = $root
-                Msi   = $msiCandidates[0].FullName
-            }
+        if (Test-ActiveNetwork) {
+            Write-Host "Network connectivity is available." -ForegroundColor Green
+            return $true
         }
 
-        # Also look for the characteristic VirtIO driver
-        # directories in case only the drivers are present.
-        $driverDirectories = @(
-            Get-ChildItem `
-                -Path $root `
-                -Directory `
-                -Recurse `
-                -ErrorAction SilentlyContinue |
-                Where-Object {
-                    $_.Name -in @(
-                        "NetKVM",
-                        "viostor",
-                        "vioscsi",
-                        "virtiofs"
-                    )
-                }
-        )
-
-        if ($driverDirectories.Count -gt 0) {
-
-            return @{
-                Drive = $root
-                Msi   = $null
-            }
-        }
+        Start-Sleep -Seconds 3
     }
 
-    return $null
+    return $false
 }
 
 
-# ------------------------------------------------------------
-# Function: Install VirtIO drivers from CD
-# ------------------------------------------------------------
+# ============================================================
+# Helper: Find and install VirtIO drivers from CD/DVD
+# ============================================================
 
-function Install-VirtIOFromCD {
-
-    param (
-        [Parameter(Mandatory = $true)]
-        [hashtable]$Media
-    )
-
-    $root = $Media.Drive
+function Install-VirtIODriversFromMedia {
 
     Write-Host ""
-    Write-Host "VirtIO media found in $root" -ForegroundColor Green
+    Write-Host "Searching CD/DVD drives for VirtIO drivers..." -ForegroundColor Cyan
 
-    # --------------------------------------------------------
-    # Preferred method: install the official MSI if present.
-    # This installs the complete VirtIO driver package.
-    # --------------------------------------------------------
-
-    if ($Media.Msi) {
-
-        Write-Host ""
-        Write-Host "Found:"
-        Write-Host "  $($Media.Msi)"
-
-        Write-Host ""
-        Write-Host "Installing VirtIO drivers from CD..." `
-            -ForegroundColor Yellow
-
-        $process = Start-Process `
-            -FilePath "msiexec.exe" `
-            -ArgumentList @(
-                "/i"
-                "`"$($Media.Msi)`""
-                "/qn"
-                "/norestart"
-                "/L*v"
-                "`"$virtioDownloadDirectory\virtio-cd-install.log`""
-            ) `
-            -Wait `
-            -PassThru
-
-        if ($process.ExitCode -notin @(0, 3010)) {
-
-            Write-Host ""
-            Write-Host `
-                "VirtIO MSI returned exit code $($process.ExitCode)." `
-                -ForegroundColor Red
-
-            return $false
+    $cdDrives = @(
+        Get-CimInstance Win32_CDROMDrive -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Drive -and (Test-Path $_.Drive)
         }
-
-        Write-Host ""
-        Write-Host `
-            "VirtIO drivers installed from CD." `
-            -ForegroundColor Green
-
-        return $true
-    }
-
-    # --------------------------------------------------------
-    # Fallback: install INF drivers directly.
-    #
-    # This is useful if the supplied CD contains the driver
-    # directories but not the MSI.
-    # --------------------------------------------------------
-
-    Write-Host ""
-    Write-Host "VirtIO MSI was not found." -ForegroundColor Yellow
-    Write-Host "Searching for VirtIO INF drivers..."
-
-    $infFiles = @(
-        Get-ChildItem `
-            -Path $root `
-            -Filter "*.inf" `
-            -File `
-            -Recurse `
-            -ErrorAction SilentlyContinue |
-            Where-Object {
-                $_.FullName -match '\\(NetKVM|viostor|vioscsi)\\'
-            }
     )
 
-    if ($infFiles.Count -eq 0) {
-
-        Write-Host `
-            "No VirtIO network/storage INF files were found." `
-            -ForegroundColor Red
-
+    if ($cdDrives.Count -eq 0) {
+        Write-Host "No mounted CD/DVD drives found." -ForegroundColor Yellow
         return $false
     }
 
-    foreach ($inf in $infFiles) {
+    foreach ($cd in $cdDrives) {
 
-        Write-Host "Installing $($inf.FullName)" `
-            -ForegroundColor DarkGray
+        $root = $cd.Drive
 
-        & pnputil.exe `
-            /add-driver $inf.FullName `
-            /install
+        Write-Host "Checking $root ..." -ForegroundColor Gray
 
-        if ($LASTEXITCODE -ne 0) {
+        # ----------------------------------------------------
+        # Preferred method: VirtIO guest tools MSI
+        # ----------------------------------------------------
 
-            Write-Host `
-                "Warning: pnputil returned $LASTEXITCODE." `
-                -ForegroundColor Yellow
+        $msi = Get-ChildItem `
+            -Path $root `
+            -Filter "virtio-win-gt-x64.msi" `
+            -File `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+
+        if ($msi) {
+
+            Write-Host "Found VirtIO guest tools MSI:" -ForegroundColor Green
+            Write-Host "  $($msi.FullName)" -ForegroundColor Gray
+
+            $process = Start-Process `
+                -FilePath "msiexec.exe" `
+                -ArgumentList @(
+                    "/i"
+                    "`"$($msi.FullName)`""
+                    "/qn"
+                    "/norestart"
+                ) `
+                -Wait `
+                -PassThru
+
+            if ($process.ExitCode -in @(0, 3010)) {
+
+                Write-Host "VirtIO MSI installation completed." -ForegroundColor Green
+
+                if (Wait-ForNetwork -TimeoutSeconds 60) {
+                    return $true
+                }
+            }
+            else {
+                Write-Host `
+                    "VirtIO MSI installation failed with exit code $($process.ExitCode)." `
+                    -ForegroundColor Yellow
+            }
+        }
+
+        # ----------------------------------------------------
+        # Fallback: Install NetKVM driver directly
+        #
+        # We deliberately prioritize NetKVM here because the
+        # immediate purpose of the bootstrap is to obtain
+        # network connectivity.
+        # ----------------------------------------------------
+
+        Write-Host "Searching for NetKVM driver INF files..." -ForegroundColor Gray
+
+        $netKvmInfs = @(
+            Get-ChildItem `
+                -Path $root `
+                -Filter "*.inf" `
+                -File `
+                -Recurse `
+                -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.FullName -match '(?i)[\\/]NetKVM[\\/]'
+            }
+        )
+
+        if ($netKvmInfs.Count -eq 0) {
+            Write-Host "No NetKVM INF files found on $root." -ForegroundColor Yellow
+            continue
+        }
+
+        foreach ($inf in $netKvmInfs) {
+
+            Write-Host "Installing NetKVM driver: $($inf.FullName)" -ForegroundColor Gray
+
+            $pnputil = Start-Process `
+                -FilePath "pnputil.exe" `
+                -ArgumentList @(
+                    "/add-driver"
+                    "`"$($inf.FullName)`""
+                    "/install"
+                ) `
+                -Wait `
+                -PassThru `
+                -NoNewWindow
+
+            if ($pnputil.ExitCode -eq 0) {
+                Write-Host "Driver installed." -ForegroundColor Green
+            }
+            else {
+                Write-Host `
+                    "pnputil returned exit code $($pnputil.ExitCode)." `
+                    -ForegroundColor Yellow
+            }
+        }
+
+        if (Wait-ForNetwork -TimeoutSeconds 60) {
+            return $true
         }
     }
 
-    Write-Host ""
-    Write-Host "VirtIO INF drivers processed." -ForegroundColor Green
-
-    return $true
+    return $false
 }
 
 
-# ------------------------------------------------------------
-# Bootstrap loop
-# ------------------------------------------------------------
+# ============================================================
+# 2. VIRTIO BOOTSTRAP
+# ============================================================
+
+Write-Host ""
+Write-Host "Checking network connectivity..." -ForegroundColor Cyan
 
 $networkAvailable = Test-ActiveNetwork
 
 if ($networkAvailable) {
 
-    Write-Host `
-        "An active network connection is already available." `
+    Write-Host "An active Internet connection is already available." `
         -ForegroundColor Green
-
 }
 else {
 
     Write-Host ""
-    Write-Host `
-        "No active network connection is available." `
+    Write-Host "No usable Internet connection detected." -ForegroundColor Yellow
+    Write-Host "Searching for VirtIO drivers on CD/DVD media..." `
         -ForegroundColor Yellow
 
-    $media = Find-VirtIOCD
-
-    while (-not $media) {
-
-        Write-Host ""
-        Write-Host "No VirtIO CD/DVD media was found." `
-            -ForegroundColor Red
-
-        Write-Host ""
-        Write-Host `
-            "Please insert the VirtIO driver CD/ISO into the"
-        Write-Host `
-            "virtual CD/DVD drive."
-        Write-Host ""
-
-        do {
-            $confirmation = Read-Host `
-                "Enter Y when the CD has been inserted, or N to abort"
-
-            $confirmation = $confirmation.Trim().ToUpper()
-
-        } while ($confirmation -notin @("Y", "N"))
-
-        if ($confirmation -eq "N") {
-
-            Write-Error `
-                "VirtIO drivers are required before continuing."
-            exit 1
-        }
-
-        # Give Windows a moment to mount the media.
-        Start-Sleep -Seconds 3
-
-        $media = Find-VirtIOCD
-
-        if (-not $media) {
-
-            Write-Host ""
-            Write-Host `
-                "No VirtIO driver media was found after the confirmation." `
-                -ForegroundColor Red
-
-            Write-Host `
-                "The script will ask again."
-        }
-    }
-
-    # Install drivers from CD.
-    $driverInstallResult = Install-VirtIOFromCD -Media $media
-
-    if (-not $driverInstallResult) {
-
-        Write-Host ""
-        Write-Error `
-            "VirtIO drivers could not be installed from the CD."
-        exit 1
-    }
-
-    # --------------------------------------------------------
-    # Give Plug and Play time to initialize the new NIC.
-    # --------------------------------------------------------
-
-    Write-Host ""
-    Write-Host `
-        "Waiting for the VirtIO network adapter to initialize..." `
-        -ForegroundColor Yellow
-
-    Start-Sleep -Seconds 10
-
-    # --------------------------------------------------------
-    # Check again for network.
-    # --------------------------------------------------------
-
-    $networkAvailable = Test-ActiveNetwork
+    $networkAvailable = Install-VirtIODriversFromMedia
 
     if (-not $networkAvailable) {
 
         Write-Host ""
-        Write-Host `
-            "No active network connection is available yet." `
+        Write-Host "No usable VirtIO network driver was found." `
             -ForegroundColor Red
 
         Write-Host ""
-        Write-Host `
-            "A reboot may be required to activate the VirtIO NIC." `
+        Write-Host "Please insert or mount the VirtIO driver ISO/CD." `
+            -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Press Y after inserting the media, or N to abort." `
             -ForegroundColor Yellow
 
-        Write-Host ""
-        Write-Host `
-            "Please verify that the VirtIO network adapter is attached"
-        Write-Host `
-            "to the VM and that the VirtIO driver was installed."
+        do {
+            $answer = Read-Host "Continue? [Y/N]"
+        }
+        while ($answer -notmatch '^[YyNn]$')
 
-        exit 1
+        if ($answer -match '^[Nn]$') {
+            throw "VirtIO media was not provided. Cannot continue without network connectivity."
+        }
+
+        Start-Sleep -Seconds 3
+
+        $networkAvailable = Install-VirtIODriversFromMedia
+
+        if (-not $networkAvailable) {
+            throw @"
+No usable network connection is available after installing/searching
+the VirtIO media.
+
+The script cannot download the current VirtIO release from Fedora.
+Please verify that the VirtIO ISO contains a Windows Server 2025
+NetKVM driver and run the provisioning script again.
+"@
+        }
     }
-
-    Write-Host ""
-    Write-Host `
-        "Network connection is now available." `
-        -ForegroundColor Green
 }
 
 
 # ============================================================
-# Current VirtIO release from Fedora
+# VirtIO download directory
 # ============================================================
 
-Write-Host ""
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host " Current VirtIO Release" -ForegroundColor Cyan
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host ""
+$virtioDownloadDirectory = "C:\ProgramData\VirtIO"
+
+New-Item `
+    -ItemType Directory `
+    -Path $virtioDownloadDirectory `
+    -Force |
+    Out-Null
 
 
-# ------------------------------------------------------------
-# Function: Get redirect destination
-# ------------------------------------------------------------
+# ============================================================
+# Helper: Resolve redirect destination
+# ============================================================
 
 function Get-RedirectDestination {
 
-    param (
-        [Parameter(Mandatory = $true)]
+    param(
+        [Parameter(Mandatory)]
         [string]$Url
     )
 
-    $handler = New-Object `
-        System.Net.Http.HttpClientHandler
-
+    $handler = New-Object System.Net.Http.HttpClientHandler
     $handler.AllowAutoRedirect = $false
 
-    $client = New-Object `
-        System.Net.Http.HttpClient($handler)
+    $client = New-Object System.Net.Http.HttpClient($handler)
 
     try {
 
@@ -451,19 +354,12 @@ function Get-RedirectDestination {
 
         $statusCode = [int]$response.StatusCode
 
-        if (
-            $statusCode -eq 301 -or
-            $statusCode -eq 302 -or
-            $statusCode -eq 303 -or
-            $statusCode -eq 307 -or
-            $statusCode -eq 308
-        ) {
+        if ($statusCode -in @(301,302,303,307,308)) {
 
             $location = $response.Headers.Location
 
             if (-not $location) {
-                throw `
-                    "Redirect response contained no Location header."
+                throw "Redirect response contained no Location header."
             }
 
             return $location.AbsoluteUri
@@ -480,18 +376,22 @@ function Get-RedirectDestination {
 }
 
 
-Write-Host `
-    "Checking Fedora stable VirtIO redirect..." `
-    -ForegroundColor Yellow
+# ============================================================
+# Download current VirtIO release
+# ============================================================
 
-$virtioBaseUrl = Get-RedirectDestination `
-    -Url $virtioStableUrl
-
-$virtioBaseUrl = $virtioBaseUrl.TrimEnd('/')
+$virtioStableUrl =
+    "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/"
 
 Write-Host ""
-Write-Host "Current VirtIO release:" -ForegroundColor Green
-Write-Host "  $virtioBaseUrl"
+Write-Host "Determining current VirtIO release..." -ForegroundColor Cyan
+
+$virtioBaseUrl = (
+    Get-RedirectDestination $virtioStableUrl
+).TrimEnd('/')
+
+Write-Host "VirtIO release:" -ForegroundColor Green
+Write-Host "  $virtioBaseUrl" -ForegroundColor Gray
 
 
 # ============================================================
@@ -499,136 +399,111 @@ Write-Host "  $virtioBaseUrl"
 # ============================================================
 
 $checksumUrl = "$virtioBaseUrl/CHECKSUM"
+$checksumFile = Join-Path `
+    $virtioDownloadDirectory `
+    "CHECKSUM"
 
 Write-Host ""
-Write-Host "Downloading CHECKSUM..." -ForegroundColor Yellow
-Write-Host "  $checksumUrl"
+Write-Host "Downloading VirtIO CHECKSUM..." -ForegroundColor Cyan
 
 Invoke-WebRequest `
     -Uri $checksumUrl `
-    -OutFile $virtioChecksumFile `
-    -UseBasicParsing
+    -OutFile $checksumFile
 
 
 # ============================================================
-# Download virtio-win-gt-x64.msi
+# Download VirtIO MSI
 # ============================================================
 
-$virtioMsiUrl = `
+$virtioMsiFile = Join-Path `
+    $virtioDownloadDirectory `
+    "virtio-win-gt-x64.msi"
+
+$virtioMsiUrl =
     "$virtioBaseUrl/virtio-win-gt-x64.msi"
 
-Write-Host ""
-Write-Host `
-    "Downloading virtio-win-gt-x64.msi..." `
-    -ForegroundColor Yellow
-
-Write-Host "  $virtioMsiUrl"
+Write-Host "Downloading VirtIO guest tools MSI..." -ForegroundColor Cyan
 
 Invoke-WebRequest `
     -Uri $virtioMsiUrl `
-    -OutFile $virtioMsiFile `
-    -UseBasicParsing
-
-if (-not (Test-Path $virtioMsiFile)) {
-
-    Write-Error `
-        "virtio-win-gt-x64.msi could not be downloaded."
-
-    exit 1
-}
+    -OutFile $virtioMsiFile
 
 
 # ============================================================
-# Verify SHA256
+# Verify SHA-256
 # ============================================================
 
 Write-Host ""
-Write-Host "Verifying VirtIO MSI checksum..." -ForegroundColor Yellow
+Write-Host "Verifying VirtIO MSI SHA-256 checksum..." -ForegroundColor Cyan
 
 $checksumText = Get-Content `
-    -LiteralPath $virtioChecksumFile `
+    -Path $checksumFile `
     -Raw
 
-$msiHash = $null
+$expectedHash = $null
 
 foreach ($line in ($checksumText -split "`r?`n")) {
 
-    if (
-        $line -match
-        '(?i)^\s*([a-f0-9]{64})\s+\*?(.+virtio-win-gt-x64\.msi)\s*$'
-    ) {
+    if ($line -match `
+        '(?i)^\s*([a-f0-9]{64})\s+\*?(.+virtio-win-gt-x64\.msi)\s*$') {
 
-        $msiHash = $matches[1]
+        $expectedHash = $matches[1]
         break
     }
 
-    if (
-        $line -match
-        '(?i)^\s*SHA256\s*\(\s*virtio-win-gt-x64\.msi\s*\)\s*=\s*([a-f0-9]{64})\s*$'
-    ) {
+    if ($line -match `
+        '(?i)^\s*SHA256\s*\(\s*virtio-win-gt-x64\.msi\s*\)\s*=\s*([a-f0-9]{64})\s*$') {
 
-        $msiHash = $matches[1]
+        $expectedHash = $matches[1]
         break
     }
 
-    if (
-        $line -match
-        '(?i)^\s*virtio-win-gt-x64\.msi\s+([a-f0-9]{64})\s*$'
-    ) {
+    if ($line -match `
+        '(?i)^\s*virtio-win-gt-x64\.msi\s+([a-f0-9]{64})\s*$') {
 
-        $msiHash = $matches[1]
+        $expectedHash = $matches[1]
         break
     }
 }
 
-if (-not $msiHash) {
-
-    Write-Error `
-        "Could not find the SHA256 checksum for virtio-win-gt-x64.msi."
-
-    exit 1
+if (-not $expectedHash) {
+    throw "Could not find SHA-256 checksum for virtio-win-gt-x64.msi in CHECKSUM."
 }
 
-$actualMsiHash = (
+$actualHash = (
     Get-FileHash `
-        -LiteralPath $virtioMsiFile `
+        -Path $virtioMsiFile `
         -Algorithm SHA256
 ).Hash
 
-Write-Host ""
-Write-Host "Expected SHA256:"
-Write-Host "  $msiHash"
+Write-Host "Expected: $expectedHash" -ForegroundColor Gray
+Write-Host "Actual:   $actualHash" -ForegroundColor Gray
 
-Write-Host ""
-Write-Host "Actual SHA256:"
-Write-Host "  $actualMsiHash"
+if ($actualHash.ToUpperInvariant() -ne $expectedHash.ToUpperInvariant()) {
 
-if (
-    $actualMsiHash.ToUpperInvariant() -ne
-    $msiHash.ToUpperInvariant()
-) {
+    Remove-Item `
+        -Path $virtioMsiFile `
+        -Force `
+        -ErrorAction SilentlyContinue
 
-    Write-Host ""
-    Write-Error "VirtIO MSI checksum verification FAILED."
-    exit 1
+    throw "VirtIO MSI SHA-256 checksum mismatch. Installation refused."
 }
 
-Write-Host ""
-Write-Host `
-    "VirtIO MSI checksum verified successfully." `
-    -ForegroundColor Green
+Write-Host "Checksum verified successfully." -ForegroundColor Green
 
 
 # ============================================================
-# Install current VirtIO MSI
+# Install VirtIO MSI silently
 # ============================================================
 
 Write-Host ""
-Write-Host `
-    "Installing current VirtIO Guest Tools MSI..." `
-    -ForegroundColor Yellow
+Write-Host "Installing VirtIO guest tools..." -ForegroundColor Cyan
 
-$msiProcess = Start-Process `
+$virtioInstallLog = Join-Path `
+    $virtioDownloadDirectory `
+    "virtio-msi-install.log"
+
+$process = Start-Process `
     -FilePath "msiexec.exe" `
     -ArgumentList @(
         "/i"
@@ -636,55 +511,942 @@ $msiProcess = Start-Process `
         "/qn"
         "/norestart"
         "/L*v"
-        "`"$virtioDownloadDirectory\virtio-msi-install.log`""
+        "`"$virtioInstallLog`""
     ) `
     -Wait `
     -PassThru
 
-if ($msiProcess.ExitCode -notin @(0, 3010)) {
-
-    Write-Error `
-        "VirtIO MSI installation failed with exit code $($msiProcess.ExitCode)."
-
-    exit $msiProcess.ExitCode
+if ($process.ExitCode -notin @(0, 3010)) {
+    throw "VirtIO MSI installation failed with exit code $($process.ExitCode)."
 }
 
-Write-Host ""
-Write-Host `
-    "Current VirtIO MSI installed successfully." `
-    -ForegroundColor Green
+Write-Host "VirtIO guest tools installed." -ForegroundColor Green
 
 
 # ============================================================
-# Download QEMU Guest Tools
+# Download VirtIO Guest Tools EXE
 # ============================================================
 
-$virtioGuestToolsUrl = `
+$virtioGuestToolsFile = Join-Path `
+    $virtioDownloadDirectory `
+    "virtio-win-guest-tools.exe"
+
+$virtioGuestToolsUrl =
     "$virtioBaseUrl/virtio-win-guest-tools.exe"
 
 Write-Host ""
-Write-Host `
-    "Downloading QEMU Guest Tools..." `
-    -ForegroundColor Yellow
-
-Write-Host "  $virtioGuestToolsUrl"
+Write-Host "Downloading VirtIO guest tools EXE..." -ForegroundColor Cyan
 
 Invoke-WebRequest `
     -Uri $virtioGuestToolsUrl `
-    -OutFile $virtioGuestToolsFile `
-    -UseBasicParsing
+    -OutFile $virtioGuestToolsFile
 
-if (-not (Test-Path $virtioGuestToolsFile)) {
+Write-Host "Guest tools downloaded to:" -ForegroundColor Green
+Write-Host "  $virtioGuestToolsFile" -ForegroundColor Gray
 
-    Write-Error `
-        "QEMU Guest Tools could not be downloaded."
 
-    exit 1
+# ============================================================
+# Recheck network after VirtIO installation
+# ============================================================
+
+if (-not (Wait-ForNetwork -TimeoutSeconds 30)) {
+    throw "VirtIO installation completed, but Internet connectivity is still unavailable."
+}
+
+
+# ============================================================
+# 3. COMPUTER NAME
+# ============================================================
+
+Write-Host ""
+Write-Host "Computer Name" -ForegroundColor Cyan
+Write-Host "-------------" -ForegroundColor Cyan
+
+$currentComputerName = $env:COMPUTERNAME
+
+do {
+
+    $computerName = Read-Host `
+        "Enter computer name (current: $currentComputerName)"
+
+    if ([string]::IsNullOrWhiteSpace($computerName)) {
+        Write-Host "Computer name cannot be empty." -ForegroundColor Red
+        continue
+    }
+
+    if (
+        $computerName.Length -gt 15 -or
+        $computerName -notmatch '^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$'
+    ) {
+        Write-Host `
+            "Invalid computer name. Use 1-15 characters: letters, numbers and hyphens." `
+            -ForegroundColor Red
+
+        $computerName = $null
+    }
+
+}
+while (-not $computerName)
+
+if ($computerName -ne $currentComputerName) {
+
+    Rename-Computer `
+        -NewName $computerName `
+        -Force
+
+    Write-Host "Computer will be renamed to $computerName." `
+        -ForegroundColor Green
+}
+else {
+    Write-Host "Computer name unchanged." -ForegroundColor Green
+}
+
+
+# ============================================================
+# 4. TIME ZONE
+# ============================================================
+
+Write-Host ""
+Write-Host "Time Zone" -ForegroundColor Cyan
+Write-Host "---------" -ForegroundColor Cyan
+
+do {
+
+    $timeZoneSearch = Read-Host `
+        "Enter a time-zone search term (e.g. Rome, Italy, UTC)"
+
+    if ([string]::IsNullOrWhiteSpace($timeZoneSearch)) {
+        Write-Host "Please enter a search term." -ForegroundColor Red
+        continue
+    }
+
+    $timeZones = @(
+        Get-TimeZone -ListAvailable |
+        Where-Object {
+            $_.Id -like "*$timeZoneSearch*" -or
+            $_.DisplayName -like "*$timeZoneSearch*"
+        }
+    )
+
+    if ($timeZones.Count -eq 0) {
+
+        Write-Host `
+            "No matching time zones found." `
+            -ForegroundColor Red
+
+        continue
+    }
+
+    if ($timeZones.Count -eq 1) {
+
+        $selectedTimeZone = $timeZones[0]
+    }
+    else {
+
+        Write-Host ""
+        Write-Host "Matching time zones:" -ForegroundColor Yellow
+
+        for ($i = 0; $i -lt $timeZones.Count; $i++) {
+
+            Write-Host `
+                "[$($i + 1)] $($timeZones[$i].Id) - $($timeZones[$i].DisplayName)"
+        }
+
+        do {
+
+            $selection = Read-Host `
+                "Select time zone number"
+
+            $selectionNumber = 0
+
+            $validSelection =
+                [int]::TryParse(
+                    $selection,
+                    [ref]$selectionNumber
+                ) -and
+                $selectionNumber -ge 1 -and
+                $selectionNumber -le $timeZones.Count
+
+            if (-not $validSelection) {
+                Write-Host "Invalid selection." -ForegroundColor Red
+            }
+
+        }
+        while (-not $validSelection)
+
+        $selectedTimeZone = $timeZones[$selectionNumber - 1]
+    }
+
+}
+while (-not $selectedTimeZone)
+
+Set-TimeZone -Id $selectedTimeZone.Id
+
+Write-Host ""
+Write-Host "Time zone set to:" -ForegroundColor Green
+Write-Host "  $($selectedTimeZone.Id)"
+
+
+# ============================================================
+# 5. TARGET EDITION
+# ============================================================
+
+$editionKeys = @{
+    "ServerStandard"   = "TVRH6-WHNXV-R9WG3-9XRFY-MY832"
+    "ServerDatacenter" = "D764K-2NDRG-47T6Q-P8T8W-YP6DF"
 }
 
 Write-Host ""
-Write-Host `
-    "QEMU Guest Tools downloaded successfully." `
+Write-Host "Windows Server Edition" -ForegroundColor Cyan
+Write-Host "----------------------" -ForegroundColor Cyan
+
+Write-Host "Querying available target editions..." -ForegroundColor Gray
+
+$dismOutput = & dism.exe /online /Get-TargetEditions 2>&1
+
+if ($LASTEXITCODE -ne 0) {
+    throw "DISM /Get-TargetEditions failed."
+}
+
+$targetEditions = @(
+    $dismOutput |
+    ForEach-Object {
+        if ($_ -match 'Target Edition\s*:\s*(.+?)\s*$') {
+            $matches[1].Trim()
+        }
+    } |
+    Where-Object {
+        $_ -and $editionKeys.ContainsKey($_)
+    } |
+    Select-Object -Unique
+)
+
+if ($targetEditions.Count -eq 0) {
+    throw "Neither ServerStandard nor ServerDatacenter is available as a target edition."
+}
+
+Write-Host ""
+Write-Host "Available target editions:" -ForegroundColor Yellow
+
+for ($i = 0; $i -lt $targetEditions.Count; $i++) {
+
+    Write-Host `
+        "[$($i + 1)] $($targetEditions[$i])"
+}
+
+do {
+
+    $editionSelection = Read-Host "Select edition number"
+
+    $editionNumber = 0
+
+    $validEdition =
+        [int]::TryParse(
+            $editionSelection,
+            [ref]$editionNumber
+        ) -and
+        $editionNumber -ge 1 -and
+        $editionNumber -le $targetEditions.Count
+
+    if (-not $validEdition) {
+        Write-Host "Invalid selection." -ForegroundColor Red
+    }
+
+}
+while (-not $validEdition)
+
+$edition = $targetEditions[$editionNumber - 1]
+$editionKey = $editionKeys[$edition]
+
+Write-Host ""
+Write-Host "Selected edition: $edition" -ForegroundColor Green
+
+
+# ============================================================
+# 6. TEMPLATE ID
+# ============================================================
+
+Write-Host ""
+Write-Host "Template ID" -ForegroundColor Cyan
+Write-Host "-----------" -ForegroundColor Cyan
+
+do {
+
+    $templateID = Read-Host `
+        "Enter two-digit Template ID (01-99)"
+
+    if ($templateID -notmatch '^(0[1-9]|[1-9][0-9])$') {
+
+        Write-Host `
+            "Template ID must be two digits from 01 to 99." `
+            -ForegroundColor Red
+
+        $templateID = $null
+    }
+
+}
+while (-not $templateID)
+
+Write-Host "Template ID: $templateID" -ForegroundColor Green
+
+
+# ============================================================
+# 7. NETWORK CONFIGURATION
+# ============================================================
+
+Write-Host ""
+Write-Host "Network Configuration" -ForegroundColor Cyan
+Write-Host "---------------------" -ForegroundColor Cyan
+
+$adapter = Get-NetAdapter -ErrorAction Stop |
+    Where-Object {
+        $_.HardwareInterface -eq $true
+    } |
+    Sort-Object ifIndex |
+    Select-Object -First 1
+
+if (-not $adapter) {
+    throw "No physical network adapter was found."
+}
+
+$interfaceIndex = $adapter.ifIndex
+
+Write-Host ""
+Write-Host "Selected network adapter:" -ForegroundColor Green
+Write-Host "  Name: $($adapter.Name)"
+Write-Host "  Index: $interfaceIndex"
+Write-Host "  Description: $($adapter.InterfaceDescription)"
+
+
+# ------------------------------------------------------------
+# Detect DHCP configuration
+# ------------------------------------------------------------
+
+$ipInterface = Get-NetIPInterface `
+    -InterfaceIndex $interfaceIndex `
+    -AddressFamily IPv4
+
+$dhcpEnabled =
+    $ipInterface.Dhcp -eq "Enabled"
+
+$dhcpIPAddress = $null
+$dhcpGateway = $null
+
+if ($dhcpEnabled) {
+
+    $dhcpIPAddress = Get-NetIPAddress `
+        -InterfaceIndex $interfaceIndex `
+        -AddressFamily IPv4 `
+        -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.PrefixOrigin -eq "Dhcp" -and
+            $_.IPAddress -notlike "169.254.*"
+        } |
+        Sort-Object SkipAsSource |
+        Select-Object -First 1
+
+    $dhcpGateway = Get-NetRoute `
+        -InterfaceIndex $interfaceIndex `
+        -AddressFamily IPv4 `
+        -DestinationPrefix "0.0.0.0/0" `
+        -ErrorAction SilentlyContinue |
+        Sort-Object RouteMetric |
+        Select-Object -First 1
+}
+
+if ($dhcpIPAddress -and $dhcpGateway) {
+
+    Write-Host ""
+    Write-Host "DHCP configuration detected." -ForegroundColor Green
+
+    $dhcpAddress = $dhcpIPAddress.IPAddress
+
+    $octets = $dhcpAddress.Split('.')
+
+    if ($octets.Count -ne 4) {
+        throw "DHCP returned an invalid IPv4 address: $dhcpAddress"
+    }
+
+    $staticIP =
+        "$($octets[0]).$($octets[1]).$($octets[2]).$templateID"
+
+    $subnetMask = "255.255.255.0"
+    $gateway = $dhcpGateway.NextHop
+
+    Write-Host ""
+    Write-Host "Derived static configuration:" -ForegroundColor Yellow
+    Write-Host "  DHCP IP:     $dhcpAddress"
+    Write-Host "  Static IP:   $staticIP"
+    Write-Host "  Mask:        $subnetMask"
+    Write-Host "  Gateway:     $gateway"
+    Write-Host "  DNS:         1.1.1.1"
+
+}
+else {
+
+    Write-Host ""
+    Write-Host "No usable DHCP configuration detected." `
+        -ForegroundColor Yellow
+
+    do {
+        $staticIP = Read-Host "Enter static IPv4 address"
+    }
+    while (
+        $staticIP -notmatch `
+            '^(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){3}$'
+    )
+
+    do {
+        $subnetMask = Read-Host "Enter subnet mask"
+    }
+    while (
+        $subnetMask -notmatch `
+            '^(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){3}$'
+    )
+
+    do {
+        $gateway = Read-Host "Enter default gateway"
+    }
+    while (
+        $gateway -notmatch `
+            '^(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){3}$'
+    )
+
+    do {
+        $dns = Read-Host "Enter DNS server"
+
+        if (
+            $dns -notmatch `
+                '^(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){3}$'
+        ) {
+            Write-Host "Invalid DNS address." -ForegroundColor Red
+            $dns = $null
+        }
+    }
+    while (-not $dns)
+
+    $dnsServers = @($dns)
+
+    Write-Host ""
+    Write-Host "Manual network configuration:" -ForegroundColor Yellow
+    Write-Host "  IP:      $staticIP"
+    Write-Host "  Mask:    $subnetMask"
+    Write-Host "  Gateway: $gateway"
+    Write-Host "  DNS:     $dns"
+}
+
+
+# ------------------------------------------------------------
+# Convert subnet mask to prefix length
+# ------------------------------------------------------------
+
+$prefixLength = 0
+
+foreach ($octet in $subnetMask.Split('.')) {
+
+    $value = [int]$octet
+
+    for ($bit = 7; $bit -ge 0; $bit--) {
+
+        if (($value -band (1 -shl $bit)) -ne 0) {
+            $prefixLength++
+        }
+        else {
+            break
+        }
+    }
+}
+
+if ($prefixLength -lt 1 -or $prefixLength -gt 32) {
+    throw "Invalid subnet mask: $subnetMask"
+}
+
+if (-not $dnsServers) {
+    $dnsServers = @("1.1.1.1")
+}
+
+
+# ------------------------------------------------------------
+# Apply static network configuration
+# ------------------------------------------------------------
+
+Write-Host ""
+Write-Host "Applying static IPv4 configuration..." `
+    -ForegroundColor Cyan
+
+Get-NetIPAddress `
+    -InterfaceIndex $interfaceIndex `
+    -AddressFamily IPv4 `
+    -ErrorAction SilentlyContinue |
+    Remove-NetIPAddress `
+        -Confirm:$false `
+        -ErrorAction SilentlyContinue
+
+Set-NetIPInterface `
+    -InterfaceIndex $interfaceIndex `
+    -AddressFamily IPv4 `
+    -Dhcp Disabled
+
+Get-NetRoute `
+    -InterfaceIndex $interfaceIndex `
+    -AddressFamily IPv4 `
+    -DestinationPrefix "0.0.0.0/0" `
+    -ErrorAction SilentlyContinue |
+    Remove-NetRoute `
+        -Confirm:$false `
+        -ErrorAction SilentlyContinue
+
+New-NetIPAddress `
+    -InterfaceIndex $interfaceIndex `
+    -IPAddress $staticIP `
+    -PrefixLength $prefixLength `
+    -DefaultGateway $gateway
+
+Set-DnsClientServerAddress `
+    -InterfaceIndex $interfaceIndex `
+    -ServerAddresses $dnsServers
+
+Write-Host "Static network configuration applied." `
     -ForegroundColor Green
 
-Write-Host "  $virtioGuestToolsFile"
+
+# ============================================================
+# 8. ENABLE REMOTE DESKTOP
+# ============================================================
+
+Write-Host ""
+Write-Host "Enabling Remote Desktop..." -ForegroundColor Cyan
+
+Set-ItemProperty `
+    -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+    -Name "fDenyTSConnections" `
+    -Value 0
+
+Enable-NetFirewallRule `
+    -DisplayGroup "Remote Desktop"
+
+Write-Host "Remote Desktop enabled." -ForegroundColor Green
+
+Write-Host "RDP firewall rules enabled." -ForegroundColor Green
+
+
+# ============================================================
+# 9. GOOGLE CHROME
+# ============================================================
+
+Write-Host ""
+Write-Host "Installing Google Chrome..." -ForegroundColor Cyan
+
+if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+    throw "winget.exe was not found. Cannot install Google Chrome."
+}
+
+$chromeProcess = Start-Process `
+    -FilePath "winget.exe" `
+    -ArgumentList @(
+        "install"
+        "--id"
+        "Google.Chrome"
+        "--exact"
+        "--silent"
+        "--accept-package-agreements"
+        "--accept-source-agreements"
+    ) `
+    -Wait `
+    -PassThru `
+    -NoNewWindow
+
+if ($chromeProcess.ExitCode -ne 0) {
+    throw "Google Chrome installation failed with exit code $($chromeProcess.ExitCode)."
+}
+
+Write-Host "Google Chrome installed." -ForegroundColor Green
+
+
+# ============================================================
+# 10. 7-ZIP
+# ============================================================
+
+Write-Host ""
+Write-Host "Installing 7-Zip..." -ForegroundColor Cyan
+
+$sevenZipProcess = Start-Process `
+    -FilePath "winget.exe" `
+    -ArgumentList @(
+        "install"
+        "--id"
+        "7zip.7zip"
+        "--exact"
+        "--silent"
+        "--accept-package-agreements"
+        "--accept-source-agreements"
+    ) `
+    -Wait `
+    -PassThru `
+    -NoNewWindow
+
+if ($sevenZipProcess.ExitCode -ne 0) {
+    throw "7-Zip installation failed with exit code $($sevenZipProcess.ExitCode)."
+}
+
+Write-Host "7-Zip installed." -ForegroundColor Green
+
+
+# ============================================================
+# 11. INITIAL WINDOWS UPDATE PASS
+# ============================================================
+
+function Install-WindowsUpdates {
+
+    param(
+        [string]$ClientApplicationID = "Server2025 Initial Configuration"
+    )
+
+    Write-Host ""
+    Write-Host "Searching for Windows Updates..." -ForegroundColor Cyan
+
+    $updateSession = New-Object -ComObject Microsoft.Update.Session
+
+    $updateSession.ClientApplicationID =
+        $ClientApplicationID
+
+    $updateSearcher =
+        $updateSession.CreateUpdateSearcher()
+
+    $searchResult =
+        $updateSearcher.Search(
+            "IsInstalled=0 and IsHidden=0 and Type='Software'"
+        )
+
+    $updatesToInstall =
+        New-Object -ComObject Microsoft.Update.UpdateColl
+
+    foreach ($update in $searchResult.Updates) {
+
+        try {
+
+            if (-not $update.EulaAccepted) {
+                $update.AcceptEula()
+            }
+
+            [void]$updatesToInstall.Add($update)
+
+            Write-Host `
+                "  $($update.Title)" `
+                -ForegroundColor Gray
+        }
+        catch {
+
+            Write-Host `
+                "Unable to prepare update: $($update.Title)" `
+                -ForegroundColor Yellow
+        }
+    }
+
+    if ($updatesToInstall.Count -eq 0) {
+
+        Write-Host "No applicable Windows updates found." `
+            -ForegroundColor Green
+
+        return
+    }
+
+    Write-Host ""
+    Write-Host `
+        "Downloading $($updatesToInstall.Count) update(s)..." `
+        -ForegroundColor Cyan
+
+    $downloader =
+        $updateSession.CreateUpdateDownloader()
+
+    $downloader.Updates =
+        $updatesToInstall
+
+    $downloadResult =
+        $downloader.Download()
+
+    Write-Host `
+        "Download completed. Result code: $($downloadResult.ResultCode)" `
+        -ForegroundColor Gray
+
+
+    Write-Host ""
+    Write-Host "Installing Windows updates..." -ForegroundColor Cyan
+
+    $installer =
+        $updateSession.CreateUpdateInstaller()
+
+    $installer.Updates =
+        $updatesToInstall
+
+    $installer.ForceQuiet = $true
+
+    $installResult =
+        $installer.Install()
+
+    Write-Host ""
+    Write-Host `
+        "Windows Update installation completed." `
+        -ForegroundColor Green
+
+    Write-Host `
+        "Result code: $($installResult.ResultCode)" `
+        -ForegroundColor Gray
+
+    Write-Host `
+        "Reboot required: $($installResult.RebootRequired)" `
+        -ForegroundColor Yellow
+}
+
+Install-WindowsUpdates
+
+
+# ============================================================
+# 12. REGISTER POST-REBOOT WINDOWS UPDATE TASK
+# ============================================================
+
+Write-Host ""
+Write-Host "Registering post-reboot Windows Update task..." `
+    -ForegroundColor Cyan
+
+$postRebootScript =
+    "C:\ProgramData\Server2025-PostRebootUpdate.ps1"
+
+$postRebootLog =
+    "C:\ProgramData\Server2025-PostRebootUpdate.log"
+
+$postRebootScriptContent = @'
+$ErrorActionPreference = "Continue"
+
+$logFile = "C:\ProgramData\Server2025-PostRebootUpdate.log"
+
+function Write-UpdateLog {
+    param([string]$Message)
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+    Add-Content `
+        -Path $logFile `
+        -Value "[$timestamp] $Message"
+}
+
+Write-UpdateLog "Post-reboot Windows Update task started."
+
+# Give networking and Windows services time to initialize.
+Start-Sleep -Seconds 30
+
+try {
+
+    Write-UpdateLog "Creating Windows Update session."
+
+    $updateSession =
+        New-Object -ComObject Microsoft.Update.Session
+
+    $updateSession.ClientApplicationID =
+        "Server2025 Post-Reboot Configuration"
+
+    $updateSearcher =
+        $updateSession.CreateUpdateSearcher()
+
+    Write-UpdateLog "Searching for additional Windows updates."
+
+    $searchResult =
+        $updateSearcher.Search(
+            "IsInstalled=0 and IsHidden=0 and Type='Software'"
+        )
+
+    $updatesToInstall =
+        New-Object -ComObject Microsoft.Update.UpdateColl
+
+    foreach ($update in $searchResult.Updates) {
+
+        try {
+
+            if (-not $update.EulaAccepted) {
+                $update.AcceptEula()
+            }
+
+            [void]$updatesToInstall.Add($update)
+
+            Write-UpdateLog "Queued: $($update.Title)"
+        }
+        catch {
+
+            Write-UpdateLog `
+                "Could not queue update: $($update.Title)"
+        }
+    }
+
+    if ($updatesToInstall.Count -gt 0) {
+
+        Write-UpdateLog `
+            "Downloading $($updatesToInstall.Count) update(s)."
+
+        $downloader =
+            $updateSession.CreateUpdateDownloader()
+
+        $downloader.Updates =
+            $updatesToInstall
+
+        $downloadResult =
+            $downloader.Download()
+
+        Write-UpdateLog `
+            "Download result: $($downloadResult.ResultCode)"
+
+        Write-UpdateLog "Installing updates."
+
+        $installer =
+            $updateSession.CreateUpdateInstaller()
+
+        $installer.Updates =
+            $updatesToInstall
+
+        $installer.ForceQuiet = $true
+
+        $installResult =
+            $installer.Install()
+
+        Write-UpdateLog `
+            "Install result: $($installResult.ResultCode)"
+
+        Write-UpdateLog `
+            "Reboot required: $($installResult.RebootRequired)"
+    }
+    else {
+
+        Write-UpdateLog "No additional updates found."
+    }
+
+}
+catch {
+
+    Write-UpdateLog `
+        "ERROR: $($_.Exception.Message)"
+}
+
+Write-UpdateLog "Post-reboot Windows Update task completed."
+
+try {
+
+    Unregister-ScheduledTask `
+        -TaskName "Server2025-PostRebootUpdate" `
+        -Confirm:$false
+
+    Write-UpdateLog "Scheduled task removed."
+
+}
+catch {
+
+    Write-UpdateLog `
+        "Could not remove scheduled task: $($_.Exception.Message)"
+}
+
+try {
+
+    Remove-Item `
+        -Path $PSCommandPath `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+}
+catch {
+}
+'@
+
+Set-Content `
+    -Path $postRebootScript `
+    -Value $postRebootScriptContent `
+    -Encoding UTF8
+
+$action = New-ScheduledTaskAction `
+    -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$postRebootScript`""
+
+$trigger = New-ScheduledTaskTrigger `
+    -AtStartup
+
+$principal = New-ScheduledTaskPrincipal `
+    -UserId "SYSTEM" `
+    -LogonType ServiceAccount `
+    -RunLevel Highest
+
+$settings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable
+
+Register-ScheduledTask `
+    -TaskName "Server2025-PostRebootUpdate" `
+    -Action $action `
+    -Trigger $trigger `
+    -Principal $principal `
+    -Settings $settings `
+    -Force |
+    Out-Null
+
+Write-Host `
+    "Post-reboot Windows Update task registered." `
+    -ForegroundColor Green
+
+
+# ============================================================
+# 13. DISM EDITION CONVERSION
+# ============================================================
+
+Write-Host ""
+Write-Host "Converting Windows Server edition..." -ForegroundColor Cyan
+
+Write-Host "Target edition: $edition" -ForegroundColor Yellow
+
+$dismProcess = Start-Process `
+    -FilePath "dism.exe" `
+    -ArgumentList @(
+        "/online"
+        "/Set-Edition:$edition"
+        "/ProductKey:$editionKey"
+        "/AcceptEula"
+    ) `
+    -Wait `
+    -PassThru `
+    -NoNewWindow
+
+if ($dismProcess.ExitCode -ne 0) {
+
+    throw `
+        "DISM edition conversion failed with exit code $($dismProcess.ExitCode)."
+}
+
+Write-Host ""
+Write-Host "Edition conversion completed successfully." `
+    -ForegroundColor Green
+
+
+# ============================================================
+# 14. FINAL REBOOT
+# ============================================================
+
+Write-Host ""
+Write-Host "Provisioning completed." -ForegroundColor Green
+Write-Host ""
+Write-Host "The server will reboot in 15 seconds." `
+    -ForegroundColor Yellow
+Write-Host "After reboot, the scheduled Windows Update task will perform" `
+    -ForegroundColor Yellow
+Write-Host "one additional Windows Update search/install pass." `
+    -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Remote Desktop is enabled." -ForegroundColor Green
+Write-Host "RDP port: TCP 3389" -ForegroundColor Gray
+Write-Host ""
+
+for ($i = 15; $i -gt 0; $i--) {
+
+    Write-Host "`rRebooting in $i seconds... " `
+        -NoNewline `
+        -ForegroundColor Yellow
+
+    Start-Sleep -Seconds 1
+}
+
+Write-Host ""
+
+Restart-Computer -Force

@@ -1815,6 +1815,121 @@ if ($LASTEXITCODE -ne 0) {
 Write-Log "Edition conversion completed successfully." Green
 
 # ============================================================
+# 12a. ON-DEMAND SERVICES
+# ============================================================
+
+Write-Section "On-Demand Services"
+
+# These services start, do their work and stop by design.
+# With start type Automatic, Server Manager reports them as
+# failed services. Manual keeps them working (trigger start,
+# scheduled tasks, Windows Update) without the false alerts.
+
+$onDemandServices = @(
+    Get-Service -Name "GoogleUpdater*", "InventorySvc" -ErrorAction SilentlyContinue
+    Get-Service -ErrorAction SilentlyContinue |
+        Where-Object DisplayName -like "Spice Agent*"
+)
+
+foreach ($service in $onDemandServices) {
+
+    Set-Service `
+        -Name $service.Name `
+        -StartupType Manual
+
+    Write-Log "Start type set to Manual: $($service.Name) ($($service.DisplayName))"
+}
+
+# Clipboard User Service is created per logon session from the
+# cbdhsvc template. Setting the template to Manual (3) applies to
+# every new session.
+
+Set-ItemProperty `
+    -Path "HKLM:\SYSTEM\CurrentControlSet\Services\cbdhsvc" `
+    -Name Start `
+    -Value 3
+
+Write-Log "Start type set to Manual: cbdhsvc (Clipboard User Service template)"
+
+# Windows Modules Installer (TrustedInstaller) is not changed: it is
+# Manual by default and Windows only sets it to Automatic while a
+# reboot is pending. The final reboot below resets it.
+
+# Google Updater creates a new, versioned service set to Automatic
+# every time it updates itself. A startup task sets any
+# GoogleUpdater* service back to Manual after every reboot.
+
+$googleUpdaterScript =
+    Join-Path $InstallDirectory "Set-GoogleUpdaterManual.ps1"
+
+$googleUpdaterContent = @'
+$LogFile = "C:\propstatInstallScript\Set-GoogleUpdaterManual.log"
+
+$services = @(
+    Get-Service -Name "GoogleUpdater*" -ErrorAction SilentlyContinue |
+        Where-Object StartType -ne "Manual"
+)
+
+foreach ($service in $services) {
+
+    try {
+        Set-Service -Name $service.Name -StartupType Manual -ErrorAction Stop
+        $result = "set to Manual (was $($service.StartType))"
+    }
+    catch {
+        $result = "FAILED: $($_.Exception.Message)"
+    }
+
+    Add-Content `
+        -Path $LogFile `
+        -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $($service.Name): $result"
+}
+'@
+
+Set-Content `
+    -Path $googleUpdaterScript `
+    -Value $googleUpdaterContent `
+    -Encoding UTF8
+
+$googleUpdaterAction =
+    New-ScheduledTaskAction `
+        -Execute (Join-Path $env:ProgramFiles "PowerShell\7\pwsh.exe") `
+        -Argument `
+            "-NoProfile -ExecutionPolicy Bypass -File `"$googleUpdaterScript`""
+
+$googleUpdaterTrigger =
+    New-ScheduledTaskTrigger `
+        -AtStartup
+
+# Give Google Updater time to register a new service after boot.
+$googleUpdaterTrigger.Delay = "PT2M"
+
+$googleUpdaterPrincipal =
+    New-ScheduledTaskPrincipal `
+        -UserId "SYSTEM" `
+        -LogonType ServiceAccount `
+        -RunLevel Highest
+
+$googleUpdaterSettings =
+    New-ScheduledTaskSettingsSet `
+        -StartWhenAvailable `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+
+Register-ScheduledTask `
+    -TaskName "Propstat-GoogleUpdaterManual" `
+    -Description "Sets Google Updater services to Manual start after every reboot." `
+    -Action $googleUpdaterAction `
+    -Trigger $googleUpdaterTrigger `
+    -Principal $googleUpdaterPrincipal `
+    -Settings $googleUpdaterSettings `
+    -Force |
+    Out-Null
+
+Write-Log "Startup task registered: Propstat-GoogleUpdaterManual" Green
+Write-Log "  Script: $googleUpdaterScript"
+Write-Log "  Log:    C:\propstatInstallScript\Set-GoogleUpdaterManual.log"
+
+# ============================================================
 # 13. FINAL REBOOT
 # ============================================================
 

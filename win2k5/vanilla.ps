@@ -529,9 +529,52 @@ function Install-VirtIOOnline {
     $stableUrl =
         "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/"
 
-    $virtioBaseUrl = Get-RedirectDestination -Url $stableUrl
+    $archiveUrl =
+        "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio"
 
-    $virtioBaseUrl = $virtioBaseUrl.TrimEnd("/")
+    # The stable-virtio redirect currently points at a different
+    # port/host (fedorapeople.org:3923) that returns HTML pages
+    # instead of files. Only the release folder name is taken from
+    # the redirect; the files are fetched from the normal archive.
+
+    $releasePattern = 'virtio-win-\d+\.\d+\.\d+-\d+'
+    $releaseName    = $null
+
+    try {
+        $redirectTarget = Get-RedirectDestination -Url $stableUrl
+        Write-Log "stable-virtio redirects to:"
+        Write-Log "  $redirectTarget"
+
+        $releaseMatch = [regex]::Match($redirectTarget, $releasePattern)
+        if ($releaseMatch.Success) {
+            $releaseName = $releaseMatch.Value
+        }
+    }
+    catch {
+        Write-Log "Could not resolve stable-virtio redirect: $($_.Exception.Message)" Yellow
+    }
+
+    if (-not $releaseName) {
+
+        Write-Log "Falling back to newest release in archive-virtio listing." Yellow
+
+        $listing = (Invoke-WebRequest -Uri "$archiveUrl/" -UseBasicParsing).Content
+
+        $releaseName =
+            [regex]::Matches($listing, "href=`"($releasePattern)/`"") |
+                ForEach-Object { $_.Groups[1].Value } |
+                Sort-Object -Unique -Property {
+                    $n = [regex]::Matches($_, '\d+') | ForEach-Object { [int]$_.Value }
+                    '{0:D6}.{1:D6}.{2:D6}.{3:D6}' -f $n[0], $n[1], $n[2], $n[3]
+                } |
+                Select-Object -Last 1
+
+        if (-not $releaseName) {
+            throw "Could not determine the current VirtIO release from $archiveUrl."
+        }
+    }
+
+    $virtioBaseUrl = "$archiveUrl/$releaseName"
 
     Write-Log "Current VirtIO release:"
     Write-Log "  $virtioBaseUrl" Green
@@ -554,6 +597,18 @@ function Install-VirtIOOnline {
     Download-File `
         -Url $msiUrl `
         -Destination $msiFile
+
+    # A real MSI is an OLE compound file (D0 CF 11 E0 A1 B1 1A E1).
+    # Anything else (e.g. an HTML page) is rejected here.
+
+    $msiHeader =
+        [System.IO.File]::ReadAllBytes($msiFile)[0..7] |
+            ForEach-Object { $_.ToString("X2") }
+
+    if (($msiHeader -join "") -ne "D0CF11E0A1B11AE1") {
+        $preview = (Get-Content -Path $msiFile -TotalCount 5) -join " "
+        throw "Downloaded file is not an MSI ($((Get-Item $msiFile).Length) bytes). Start of file: $preview"
+    }
 
     # The release CHECKSUM file only lists the RPMs (MD5), not the
     # MSI, so the MSI is verified by its Authenticode signature.

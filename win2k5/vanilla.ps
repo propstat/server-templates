@@ -1562,23 +1562,76 @@ Install-MsiPackage `
 
 Write-Section "7-Zip"
 
-# Official 7-Zip downloads are hosted on SourceForge. The version
-# is pinned; update $SevenZipVersion for a newer release.
+# 7-Zip is downloaded from the official GitHub releases of the
+# 7-Zip project (ip7z/7zip). SourceForge serves an HTML download
+# page instead of the file.
+#
+# $SevenZipVersion = "latest" installs the newest release. Set a
+# release tag (e.g. "26.03") to pin a specific version.
 
-$SevenZipVersion = "26.03"
+$SevenZipVersion = "latest"
 
-$sevenZipMsiName =
-    "7z$($SevenZipVersion -replace '\.', '')-x64.msi"
+$sevenZipReleaseUrl =
+    if ($SevenZipVersion -eq "latest") {
+        "https://api.github.com/repos/ip7z/7zip/releases/latest"
+    }
+    else {
+        "https://api.github.com/repos/ip7z/7zip/releases/tags/$SevenZipVersion"
+    }
 
-$sevenZipMsiUrl =
-    "https://downloads.sourceforge.net/project/sevenzip/7-Zip/$SevenZipVersion/$sevenZipMsiName"
+# The GitHub release API lists each asset with its SHA-256 digest,
+# which is used to verify the download.
+
+$sevenZipRelease =
+    Invoke-RestMethod `
+        -Uri $sevenZipReleaseUrl `
+        -Headers @{ "User-Agent" = "propstat-provisioning" }
+
+$SevenZipVersion = $sevenZipRelease.tag_name
+
+Write-Log "7-Zip release: $SevenZipVersion" Green
+
+# The 64-bit MSI is named 7z<version without dot>-x64.msi,
+# e.g. 7z2603-x64.msi.
+
+$sevenZipAsset =
+    $sevenZipRelease.assets |
+        Where-Object name -match '^7z\d+-x64\.msi$' |
+        Select-Object -First 1
+
+if (-not $sevenZipAsset) {
+    throw "7-Zip release $SevenZipVersion has no x64 MSI asset."
+}
+
+$sevenZipMsiName = $sevenZipAsset.name
 
 $sevenZipMsi =
     Join-Path $ApplicationDirectory $sevenZipMsiName
 
 Download-File `
-    -Url $sevenZipMsiUrl `
+    -Url $sevenZipAsset.browser_download_url `
     -Destination $sevenZipMsi
+
+$sevenZipActualHash = (
+    Get-FileHash `
+        -Path $sevenZipMsi `
+        -Algorithm SHA256
+).Hash.ToLowerInvariant()
+
+Write-Log "7-Zip MSI SHA-256:"
+Write-Log "  $sevenZipActualHash"
+
+if ($sevenZipAsset.digest -match '^sha256:([0-9a-f]{64})$') {
+
+    if ($sevenZipActualHash -ne $Matches[1].ToLowerInvariant()) {
+        throw "7-Zip MSI SHA-256 does not match the GitHub release digest ($($Matches[1]))."
+    }
+
+    Write-Log "SHA-256 matches the GitHub release digest." Green
+}
+else {
+    Write-Log "GitHub release lists no SHA-256 digest for $sevenZipMsiName; hash not verified." Yellow
+}
 
 Install-MsiPackage `
     -Name "7-Zip $SevenZipVersion" `

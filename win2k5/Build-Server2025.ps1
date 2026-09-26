@@ -73,18 +73,23 @@ function Invoke-Dism {
 function Remove-MountSafely {
     param([string]$MountPath)
 
-    if (Test-Path $MountPath) {
-        try {
-            & dism.exe /English /Get-MountedWimInfo 2>$null | Out-Null
+    $full = [IO.Path]::GetFullPath($MountPath).TrimEnd('\')
 
-            & dism.exe /Unmount-Wim /MountDir:$MountPath /Discard 2>$null
+    $mounted = Get-WindowsImage -Mounted -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path.TrimEnd('\') -ieq $full }
 
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warning "Could not discard mount $MountPath automatically."
-            }
-        }
-        catch {
-            Write-Warning "Mount cleanup failed: $($_.Exception.Message)"
+    if (-not $mounted) {
+        return   # nothing mounted here, nothing to discard
+    }
+
+    Write-Host "Discarding existing mount at $full (status: $($mounted.MountStatus))"
+
+    & dism.exe /English /Unmount-Wim "/MountDir:$full" /Discard
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Unmount failed (exit $LASTEXITCODE), running /Cleanup-Wim"
+        & dism.exe /English /Cleanup-Wim
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not release mount at $full. Reboot, then run 'dism /Cleanup-Wim'."
         }
     }
 }
@@ -234,6 +239,10 @@ finally {
         Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue
     }
 }
+
+# Files copied from an ISO keep the ReadOnly attribute; DISM cannot mount
+# a read-only WIM for read/write.
+Get-ChildItem -Path $IsoRoot -Recurse -File | ForEach-Object { $_.IsReadOnly = $false }
 
 if (-not (Test-Path $BootWim)) {
     throw "boot.wim was not found at $BootWim"

@@ -278,8 +278,15 @@ Invoke-Dism @(
 
 Write-Step 'Backing up original WIM files'
 
-Copy-Item $BootWim "$BootWim.bak" -Force
-Copy-Item $InstallWim "$InstallWim.bak" -Force
+# Keep backups OUTSIDE the ISO folder, otherwise oscdimg packs them into the ISO.
+$BackupRoot       = Join-Path $WorkRoot 'Backup'
+$BootWimBackup    = Join-Path $BackupRoot 'boot.wim.bak'
+$InstallWimBackup = Join-Path $BackupRoot 'install.wim.bak'
+
+New-Item -ItemType Directory -Force -Path $BackupRoot | Out-Null
+
+Copy-Item $BootWim $BootWimBackup -Force
+Copy-Item $InstallWim $InstallWimBackup -Force
 
 # ---------------------------------------------------------------------------
 # boot.wim
@@ -357,6 +364,41 @@ foreach ($Index in $Indexes) {
 }
 
 # ---------------------------------------------------------------------------
+# Compact install.wim
+# ---------------------------------------------------------------------------
+
+# Each /Commit appends data to the WIM without reclaiming superseded files.
+# Exporting every index into a fresh WIM rebuilds it and restores sharing
+# between editions.
+
+Write-Step 'Compacting install.wim'
+
+$AllIndexes = @(
+    Select-String -Path $WimInfoFile -Pattern '^\s*Index\s*:\s*(\d+)' |
+    ForEach-Object { [int]$_.Matches[0].Groups[1].Value }
+)
+
+$CompactWim = Join-Path $WorkRoot 'install-compact.wim'
+
+if (Test-Path $CompactWim) {
+    Remove-Item $CompactWim -Force
+}
+
+foreach ($Index in $AllIndexes) {
+    Invoke-Dism @(
+        '/English'
+        '/Export-Image'
+        "/SourceImageFile:$InstallWim"
+        "/SourceIndex:$Index"
+        "/DestinationImageFile:$CompactWim"
+        '/Compress:max'
+        '/CheckIntegrity'
+    )
+}
+
+Move-Item -Path $CompactWim -Destination $InstallWim -Force
+
+# ---------------------------------------------------------------------------
 # Verify
 # ---------------------------------------------------------------------------
 
@@ -420,8 +462,8 @@ Write-Host ""
 Write-Host ("Size: {0:N2} GB" -f ($OutputFile.Length / 1GB))
 Write-Host ""
 Write-Host "Original WIM backups:"
-Write-Host "  $BootWim.bak"
-Write-Host "  $InstallWim.bak"
+Write-Host "  $BootWimBackup"
+Write-Host "  $InstallWimBackup"
 Write-Host ""
 Write-Host "Driver INF files injected: $DriverCount"
 Write-Host "install.wim indexes modified: $($Indexes -join ', ')"

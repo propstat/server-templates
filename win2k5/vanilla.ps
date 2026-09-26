@@ -2080,6 +2080,62 @@ catch {
     Write-Log "Sysprep shortcut could not be created: $($_.Exception.Message)" Yellow
 }
 
+# Production script: downloaded now so it is part of the template,
+# started from the "Arm for Production" shortcut on servers created
+# from the template. production.ps1 removes this shortcut itself.
+
+$productionScriptUrl =
+    "https://raw.githubusercontent.com/propstat/server-templates/refs/heads/main/win2k5/production.ps"
+
+$productionScript =
+    Join-Path $InstallDirectory "production.ps1"
+
+$productionShortcutPath =
+    Join-Path $publicDesktop "Arm for Production.lnk"
+
+try {
+
+    Download-File `
+        -Url $productionScriptUrl `
+        -Destination $productionScript
+
+    # Reject anything that is not the PowerShell script (e.g. an
+    # HTML error page).
+    $productionHead = Get-Content -Path $productionScript -TotalCount 1
+
+    if ($productionHead -notmatch '^\s*#requires\b') {
+        Remove-Item -Path $productionScript -Force -ErrorAction SilentlyContinue
+        throw "Downloaded file is not the production script (first line: $productionHead)."
+    }
+
+    $pwshExe = Join-Path $env:ProgramFiles "PowerShell\7\pwsh.exe"
+
+    $shell = New-Object -ComObject WScript.Shell
+
+    $productionShortcut = $shell.CreateShortcut($productionShortcutPath)
+    $productionShortcut.TargetPath       = $pwshExe
+    $productionShortcut.Arguments        = "-NoProfile -ExecutionPolicy Bypass -File `"$productionScript`""
+    $productionShortcut.WorkingDirectory = $InstallDirectory
+    $productionShortcut.IconLocation     = "$pwshExe,0"
+    $productionShortcut.Description      = "Arm for Production: name, network, domain, updates"
+    $productionShortcut.Save()
+
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell)
+
+    # production.ps1 requires administrator rights: set the
+    # shortcut's "Run as administrator" flag (byte 0x15, bit 0x20
+    # of the .lnk header) so Windows shows the UAC prompt.
+    $shortcutBytes = [System.IO.File]::ReadAllBytes($productionShortcutPath)
+    $shortcutBytes[0x15] = $shortcutBytes[0x15] -bor 0x20
+    [System.IO.File]::WriteAllBytes($productionShortcutPath, $shortcutBytes)
+
+    Write-Log "Shortcut created: Arm for Production.lnk" Green
+    Write-Log "  Script: $productionScript"
+}
+catch {
+    Write-Log "Production script or shortcut could not be set up: $($_.Exception.Message)" Yellow
+}
+
 # ============================================================
 # 12. EDITION CONVERSION
 # ============================================================

@@ -1467,26 +1467,94 @@ Write-Log "Remote Desktop enabled." Green
 
 Write-Section "Google Chrome"
 
-if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
-    throw "winget.exe was not found."
+# Applications are installed from the vendors' MSI packages with
+# msiexec instead of winget. winget registers its package catalog
+# (Microsoft.Winget.Source) for the current user, which blocks
+# sysprep /generalize.
+
+$ApplicationDirectory = Join-Path $InstallDirectory "Applications"
+
+New-Item -ItemType Directory -Path $ApplicationDirectory -Force | Out-Null
+
+function Install-MsiPackage {
+
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        [string]$MsiFile
+    )
+
+    # A real MSI is an OLE compound file (D0 CF 11 E0 A1 B1 1A E1).
+    # Anything else (e.g. an HTML page) is rejected here.
+
+    $header =
+        [System.IO.File]::ReadAllBytes($MsiFile)[0..7] |
+            ForEach-Object { $_.ToString("X2") }
+
+    if (($header -join "") -ne "D0CF11E0A1B11AE1") {
+        throw "$Name download is not an MSI ($((Get-Item $MsiFile).Length) bytes)."
+    }
+
+    $msiLog =
+        [System.IO.Path]::ChangeExtension($MsiFile, ".install.log")
+
+    Write-Log "Installing $Name..."
+
+    $process = Start-Process `
+        -FilePath "msiexec.exe" `
+        -ArgumentList @(
+            "/i",
+            "`"$MsiFile`"",
+            "/qn",
+            "/norestart",
+            "/L*v",
+            "`"$msiLog`""
+        ) `
+        -Wait `
+        -PassThru
+
+    Write-Log "$Name MSI exit code: $($process.ExitCode)"
+
+    if ($process.ExitCode -notin @(0, 1641, 3010)) {
+        throw "$Name installation failed with exit code $($process.ExitCode). See $msiLog"
+    }
+
+    Write-Log "$Name installed." Green
 }
 
-Write-Log "Installing Google Chrome..."
+# Google's enterprise MSI always contains the current stable
+# Chrome (64-bit). It is Authenticode-signed by Google LLC.
 
-& winget.exe install `
-    --id Google.Chrome `
-    --exact `
-    --silent `
-    --accept-package-agreements `
-    --accept-source-agreements
+$chromeMsiUrl =
+    "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 
-Write-Log "winget Chrome exit code: $LASTEXITCODE"
+$chromeMsi =
+    Join-Path $ApplicationDirectory "googlechromestandaloneenterprise64.msi"
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Google Chrome installation failed with exit code $LASTEXITCODE."
+Download-File `
+    -Url $chromeMsiUrl `
+    -Destination $chromeMsi
+
+$chromeSignature =
+    Get-AuthenticodeSignature `
+        -FilePath $chromeMsi
+
+Write-Log "Chrome MSI signature: $($chromeSignature.Status)"
+Write-Log "  $($chromeSignature.SignerCertificate.Subject)"
+
+if ($chromeSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+    throw "Chrome MSI signature is not valid ($($chromeSignature.Status)): $($chromeSignature.StatusMessage)"
 }
 
-Write-Log "Google Chrome installed." Green
+if ($chromeSignature.SignerCertificate.Subject -notmatch '(?i)\bO="?Google LLC') {
+    throw "Chrome MSI is signed by an unexpected publisher: $($chromeSignature.SignerCertificate.Subject)"
+}
+
+Install-MsiPackage `
+    -Name "Google Chrome" `
+    -MsiFile $chromeMsi
 
 # ============================================================
 # 9. 7-ZIP
@@ -1494,22 +1562,27 @@ Write-Log "Google Chrome installed." Green
 
 Write-Section "7-Zip"
 
-Write-Log "Installing 7-Zip..."
+# Official 7-Zip downloads are hosted on SourceForge. The version
+# is pinned; update $SevenZipVersion for a newer release.
 
-& winget.exe install `
-    --id 7zip.7zip `
-    --exact `
-    --silent `
-    --accept-package-agreements `
-    --accept-source-agreements
+$SevenZipVersion = "26.03"
 
-Write-Log "winget 7-Zip exit code: $LASTEXITCODE"
+$sevenZipMsiName =
+    "7z$($SevenZipVersion -replace '\.', '')-x64.msi"
 
-if ($LASTEXITCODE -ne 0) {
-    throw "7-Zip installation failed with exit code $LASTEXITCODE."
-}
+$sevenZipMsiUrl =
+    "https://downloads.sourceforge.net/project/sevenzip/7-Zip/$SevenZipVersion/$sevenZipMsiName"
 
-Write-Log "7-Zip installed." Green
+$sevenZipMsi =
+    Join-Path $ApplicationDirectory $sevenZipMsiName
+
+Download-File `
+    -Url $sevenZipMsiUrl `
+    -Destination $sevenZipMsi
+
+Install-MsiPackage `
+    -Name "7-Zip $SevenZipVersion" `
+    -MsiFile $sevenZipMsi
 
 # ============================================================
 # 10. INITIAL WINDOWS UPDATE
@@ -1850,15 +1923,79 @@ foreach ($shortcutFile in $shortcutFiles) {
     }
 }
 
-# Sysprep shortcut, created locally: generalizes the installation,
-# sets OOBE for the next boot and shuts the machine down. sysprep.exe requires elevation,
-# so Windows shows a UAC prompt when the shortcut is opened.
+# Sysprep shortcut, created locally. It runs a small preparation
+# script that removes Appx packages sysprep refuses to generalize
+# (installed for a user but not provisioned for all users, e.g.
+# the winget source package that winget refreshes on every use)
+# and then starts sysprep: generalize, OOBE on next boot, shut down.
 
 $sysprepExe =
     Join-Path $env:SystemRoot "System32\Sysprep\sysprep.exe"
 
+$sysprepScript =
+    Join-Path $InstallDirectory "Invoke-Sysprep.ps1"
+
 $sysprepShortcutPath =
     Join-Path $publicDesktop "Sysprep (Generalize, OOBE, Shutdown).lnk"
+
+# Runs under Windows PowerShell 5.1: the Appx cmdlets are not
+# reliable in PowerShell 7.
+$sysprepContent = @'
+$ErrorActionPreference = "Stop"
+
+$LogFile = "C:\propstatInstallScript\Invoke-Sysprep.log"
+
+# Packages that block sysprep when installed for a single user.
+$blockingPackages = @(
+    "Microsoft.Winget.Source"
+)
+
+function Write-Log {
+    param([string]$Message, [ConsoleColor]$Color = [ConsoleColor]::Gray)
+    Add-Content -Path $LogFile -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message" -ErrorAction SilentlyContinue
+    Write-Host $Message -ForegroundColor $Color
+}
+
+# Relaunch elevated if needed (the shortcut starts powershell.exe).
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`""
+    )
+    exit
+}
+
+try {
+
+    Write-Log "============================================================" Cyan
+    Write-Log "Preparing sysprep" Cyan
+    Write-Log "============================================================" Cyan
+
+    foreach ($name in $blockingPackages) {
+
+        $packages = @(Get-AppxPackage -AllUsers -Name $name)
+
+        if ($packages.Count -eq 0) {
+            Write-Log "$name not installed."
+            continue
+        }
+
+        foreach ($package in $packages) {
+            Write-Log "Removing $($package.PackageFullName) for all users..."
+            Remove-AppxPackage -Package $package.PackageFullName -AllUsers
+        }
+    }
+
+    Write-Log "Starting sysprep: /generalize /oobe /shutdown" Green
+
+    & "$env:SystemRoot\System32\Sysprep\sysprep.exe" /generalize /oobe /shutdown
+}
+catch {
+    Write-Log "Sysprep preparation failed: $($_.Exception.Message)" Red
+    Write-Log "Sysprep was not started. Log: $LogFile" Yellow
+    Read-Host "Press ENTER to close"
+}
+'@
 
 try {
 
@@ -1866,20 +2003,25 @@ try {
         throw "$sysprepExe not found."
     }
 
+    Set-Content `
+        -Path $sysprepScript `
+        -Value $sysprepContent `
+        -Encoding UTF8
+
     $shell = New-Object -ComObject WScript.Shell
 
     $sysprepShortcut = $shell.CreateShortcut($sysprepShortcutPath)
-    $sysprepShortcut.TargetPath       = $sysprepExe
-    $sysprepShortcut.Arguments        = "/generalize /oobe /shutdown"
-    $sysprepShortcut.WorkingDirectory = Split-Path -Path $sysprepExe -Parent
+    $sysprepShortcut.TargetPath       = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    $sysprepShortcut.Arguments        = "-NoProfile -ExecutionPolicy Bypass -File `"$sysprepScript`""
+    $sysprepShortcut.WorkingDirectory = $InstallDirectory
     $sysprepShortcut.IconLocation     = "$sysprepExe,0"
-    $sysprepShortcut.Description      = "Sysprep: generalize, OOBE on next boot, shut down"
+    $sysprepShortcut.Description      = "Sysprep: remove blocking Appx packages, generalize, OOBE on next boot, shut down"
     $sysprepShortcut.Save()
 
     [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell)
 
     Write-Log "Shortcut created: Sysprep (Generalize, OOBE, Shutdown).lnk" Green
-    Write-Log "  $sysprepExe /generalize /oobe /shutdown"
+    Write-Log "  Script: $sysprepScript"
 }
 catch {
     Write-Log "Sysprep shortcut could not be created: $($_.Exception.Message)" Yellow

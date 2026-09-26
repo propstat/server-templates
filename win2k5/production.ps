@@ -1087,7 +1087,45 @@ else {
 }
 
 # ============================================================
-# 7. REBOOT
+# 7. DESKTOP CLEANUP
+# ============================================================
+
+Write-Section "Desktop Cleanup"
+
+# Template-only shortcuts are removed from the all users desktop:
+# every shortcut whose name contains "sysprep" or
+# "Arm for Production" (any upper/lower case).
+
+$publicDesktop =
+    [Environment]::GetFolderPath("CommonDesktopDirectory")
+
+$templateShortcuts = @(
+    Get-ChildItem -Path $publicDesktop -File -Force -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Extension -in ".lnk", ".url" -and (
+                $_.BaseName -like "*sysprep*" -or
+                $_.BaseName -like "*Arm for Production*"
+            )
+        }
+)
+
+if ($templateShortcuts.Count -eq 0) {
+    Write-Log "No template shortcuts found on $publicDesktop."
+}
+
+foreach ($shortcut in $templateShortcuts) {
+
+    try {
+        Remove-Item -LiteralPath $shortcut.FullName -Force
+        Write-Log "Shortcut removed: $($shortcut.Name)" Green
+    }
+    catch {
+        Write-Log "Shortcut $($shortcut.Name) could not be removed: $($_.Exception.Message)" Yellow
+    }
+}
+
+# ============================================================
+# 8. REBOOT
 # ============================================================
 
 Write-Section "Reboot"

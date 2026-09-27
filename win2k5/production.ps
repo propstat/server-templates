@@ -734,6 +734,140 @@ while ($true) {
 }
 
 # ============================================================
+# 4a. WINDOWS ACTIVATION
+# ============================================================
+
+Write-Section "Windows Activation"
+
+# Runs after the network configuration because activation needs
+# Internet access (or a KMS host). If Windows is not activated,
+# a product key can be entered; ENTER skips activation.
+
+$windowsApplicationId = "55c92734-d682-4d71-983e-d6ec3f16059f"
+
+$licenseStatusNames = @{
+    0 = "Unlicensed"
+    1 = "Licensed"
+    2 = "Initial grace period"
+    3 = "Additional grace period"
+    4 = "Non-genuine grace period"
+    5 = "Notification"
+    6 = "Extended grace period"
+}
+
+$activationErrors = @{
+    "C004C003" = "The product key is blocked."
+    "C004C008" = "The product key has been used too often."
+    "C004C020" = "The MAK has exceeded its activation limit."
+    "C004F050" = "The product key is invalid."
+    "C004F069" = "The product key is not valid for this edition."
+    "C004F074" = "No KMS host could be contacted."
+    "8007232B" = "DNS name does not exist (no KMS host found)."
+    "80072EE7" = "The activation server could not be reached."
+}
+
+function Get-WindowsLicense {
+
+    Get-CimInstance `
+        -ClassName SoftwareLicensingProduct `
+        -Filter "ApplicationID='$windowsApplicationId' AND PartialProductKey IS NOT NULL" |
+        Select-Object -First 1
+}
+
+function Get-ActivationErrorText {
+
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    $code = "{0:X8}" -f $ErrorRecord.Exception.HResult
+
+    foreach ($known in $activationErrors.Keys) {
+        if ($ErrorRecord.Exception.Message -match $known) {
+            $code = $known
+        }
+    }
+
+    $text = $activationErrors[$code] ?? $ErrorRecord.Exception.Message
+
+    return "0x$code - $text"
+}
+
+$license = Get-WindowsLicense
+
+if ($license) {
+    Write-Log "Edition:  $($license.Name)"
+    Write-Log "Channel:  $($license.ProductKeyChannel)"
+    Write-Log "Key:      *****-*****-*****-*****-$($license.PartialProductKey)"
+    Write-Log "Status:   $($licenseStatusNames[[int]$license.LicenseStatus] ?? $license.LicenseStatus)"
+}
+
+if ($license -and $license.LicenseStatus -eq 1) {
+
+    Write-Log "Windows is activated." Green
+}
+else {
+
+    Write-Log "Windows is not activated." Yellow
+
+    while ($true) {
+
+        $productKey =
+            (Read-Host "Product key XXXXX-XXXXX-XXXXX-XXXXX-XXXXX (ENTER to skip)").Trim().ToUpperInvariant()
+
+        if (-not $productKey) {
+            Write-Log "Activation skipped. Windows remains unactivated." Yellow
+            break
+        }
+
+        if ($productKey -notmatch '^[A-Z0-9]{5}(-[A-Z0-9]{5}){4}$') {
+            Write-Host "The key must have the format XXXXX-XXXXX-XXXXX-XXXXX-XXXXX." -ForegroundColor Yellow
+            continue
+        }
+
+        try {
+
+            Write-Log "Installing product key *****-*****-*****-*****-$($productKey.Substring(24))..."
+
+            $licensingService = Get-CimInstance -ClassName SoftwareLicensingService
+
+            Invoke-CimMethod `
+                -InputObject $licensingService `
+                -MethodName InstallProductKey `
+                -Arguments @{ ProductKey = $productKey } |
+                Out-Null
+
+            Invoke-CimMethod `
+                -InputObject $licensingService `
+                -MethodName RefreshLicenseStatus |
+                Out-Null
+
+            Write-Log "Product key installed. Activating..."
+
+            Invoke-CimMethod `
+                -InputObject (Get-WindowsLicense) `
+                -MethodName Activate |
+                Out-Null
+
+            $license = Get-WindowsLicense
+
+            if ($license.LicenseStatus -eq 1) {
+                Write-Log "Windows activated ($($license.ProductKeyChannel))." Green
+                break
+            }
+
+            Write-Log "Activation finished, but the status is $($licenseStatusNames[[int]$license.LicenseStatus] ?? $license.LicenseStatus)." Yellow
+        }
+        catch {
+            Write-Log "Activation failed: $(Get-ActivationErrorText -ErrorRecord $_)" Yellow
+        }
+
+        Write-Host "Enter another key, or press ENTER to continue without activation." -ForegroundColor DarkGray
+    }
+}
+
+# ============================================================
 # 5. DOMAIN JOIN (OPTIONAL)
 # ============================================================
 

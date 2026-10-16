@@ -1,0 +1,23 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${customhostname:?Missing Hostname}
+    volumes:
+      - ./vw-data/:/data/
+    ports:
+      - 127.0.0.1:8000:80
+  cloudflare-ddns:
+    image: favonia/cloudflare-ddns:1
+    network_mode: host
+    restart: always
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [all]
+    security_opt: [no-new-privileges:true]
+    environment:
+      - CLOUDFLARE_API_TOKEN=${dns_cloudflare_api_token:?Missing Cloudflare API token}
+      - DOMAINS=${customhostname:?Missing Hostname}
+      - PROXIED=true

@@ -1,0 +1,65 @@
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    server_name vault.example.com;
+
+    # TLS certificate.
+    ssl_certificate     /etc/letsencrypt/live/vault.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/vault.example.com/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:VaultwardenTLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # Request limits.
+    client_max_body_size 64m;
+    client_body_timeout 30s;
+    client_header_timeout 15s;
+    send_timeout 60s;
+
+    # Security headers.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "same-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
+    # Enable only when HTTPS is guaranteed for this hostname
+    # and all intended access paths.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Access and error logs.
+    access_log /var/log/nginx/vaultwarden_access.log;
+    error_log  /var/log/nginx/vaultwarden_error.log warn;
+
+    # Do not expose hidden files or directories.
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+
+    # Vaultwarden application and WebSocket notifications.
+    location / {
+        proxy_pass http://127.0.0.8000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+
+        # WebSocket support.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # Timeouts.
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 3600s;
+
+        # Avoid buffering long-lived notification connections.
+        proxy_buffering off;
+    }
+}

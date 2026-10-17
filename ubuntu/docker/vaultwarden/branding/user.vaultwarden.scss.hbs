@@ -1,0 +1,91 @@
+/* File location: /data/templates/scss/user.vaultwarden.scss.hbs */
+
+/* --- Variables --- */
+/* You can set different logos for the Vault (User) and the Admin Console (Org) */
+$logo-default: url('/vw_static/logo-gray.png');
+$logo-admin:   url('/vw_static/logo-gray.png'); 
+
+/* Sidebar Customization */
+$sidebar-width: 15rem; /* Set this to match your logo width if needed */
+
+/* --- Mixins --- */
+@mixin hide-element { display: none !important; }
+
+/* --- Hiding 2FA Providers --- */
+/* 0: Authenticator App, 1: Email, 2: Duo, 3: YubiKey OTP, 7: FIDO2 WebAuthn */
+/*
+ .providers-2fa-0, .providers-2fa-1, .providers-2fa-2, .providers-2fa-3, .providers-2fa-7 {
+  @include hide-element;
+}
+*/
+
+
+/* --- Loading Screen --- */
+app-root img.new-logo-themed { content: $logo-default !important; }
+
+/* --- Login Screen --- */
+auth-anon-layout bit-landing-header {
+  bit-svg {
+    /* Hide original SVG */
+    > svg { @include hide-element; }
+
+    /* Inject Custom Logo */
+    &::before {
+      display: block !important;
+      content: "" !important;
+      width: 100% !important;
+      height: 42px !important;
+      background: $logo-default no-repeat center left !important;
+      background-size: contain !important;
+    }
+  }
+}
+
+/* --- Dashboard Sidebar --- */
+bit-nav-logo {
+  /* 
+    Apply if you want logo to be less cropped when minimized
+    if you have a logo like the one Vaultwarden and Bitwarden have
+  */
+  /* > div { padding-right: 2px !important; } */
+
+  bit-svg {
+    > svg { @include hide-element; }
+
+    &::before {
+      display: block !important;
+      content: "" !important;
+      width: 100% !important;
+      height: 42px !important;
+      background-repeat: no-repeat !important;
+      background-size: auto 42px !important;
+      background-position: center left !important;
+    }
+  }
+}
+
+/* --- Dashboard Sidebar --- */
+app-user-layout bit-nav-logo bit-svg::before { background-image: $logo-default !important; }
+app-organization-layout bit-nav-logo bit-svg::before { background-image: $logo-admin !important; }
+
+/* --- Sidebar Layout & Logic --- */
+#bit-side-nav {
+  /*
+    Only override width if it matches the default '18rem' inline style.
+    This ensures we don't break the 'Collapsed' state (4.5rem) or manual resizes.
+  */
+  &[style*="18rem"] { max-width: $sidebar-width !important; }
+
+  /*
+    When sidebar is collapsed (width is usually 4.5rem), hide the custom logo
+    so it doesn't look broken or clipped.
+  */
+  &[style*="4.5rem"] {
+    bit-nav-logo bit-svg::before { display: none !important; }
+    /*
+      Optional: Show original icon again when minimized? 
+      Remove the comment below to enable:
+    */
+    /* bit-nav-logo bit-svg > svg { display: block !important; } */
+  }
+}

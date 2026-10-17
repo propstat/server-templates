@@ -1,0 +1,157 @@
+%YAML 1.2
+---
+name: vaultwarden
+description: Vaultwarden is a lightweight and self-hosted password manager.
+environmentFile: /etc/propstat/vaultwarden.env
+
+installation:
+  - dependencies:
+      - nginx
+      - docker-compose
+      - certbot
+      - python3-certbot-dns-cloudflare
+      - argon2
+      - ufw
+      - curl
+
+variables:
+  requires_env: yes
+  variables:
+
+    - name: hostname
+      type: string
+      description: The hostname for your Vaultwarden instance (e.g., vault.example.com).
+      required: true
+      secret-settings:
+        secret: false
+        argon2: false
+
+    - name: enable_automatic_certificate
+      type: boolean
+      description: Whether to automatically obtain and renew SSL certificates for your hostname.
+      required: true
+      secret-settings:
+        secret: false
+        argon2: false  
+  
+      - name: certificate_server
+      description: Choose which certificate server to use for obtaining SSL certificates.
+      type: multiple_choice
+      choices:
+        - choice-value :  https://acme-v02.api.letsencrypt.org/directory
+          choice-description :  Let's Encrypt Default Server
+        - choice-value :  https://acme-staging-v02.api.letsencrypt.org/directory
+          choice-description :  Let's Encrypt Staging Server
+        - choice-value :  https://dv.acme-v02.api.pki.goog/directory
+          choice-description :  Google Default Server
+        - choice-value :  https://dv.acme-v02.test-api.pki.goog/directory
+          choice-description :  Google Staging Server
+      required: true
+      default: true
+      secret-settings:
+        secret: false
+        argon2: false
+    
+    - name: dns_cloudflare_api_token
+      description: Your Cloudflare API token with DNS edit permissions.
+      type: string
+      required: true
+      secret-settings:
+        secret: true
+        argon2: false
+
+    - name: admin_password
+      description: The password for the Vaultwarden admin panel.
+      type: string
+      required: true
+      secret-settings:
+        secret: true
+        argon2: true
+    
+    - name: max_upload_size
+      description: The maximum upload size for attachements in vaultwarden.
+      type: string
+      required: true
+      default: 10
+      secret-settings:
+        secret: false
+        argon2: false
+    
+    - name: activate_dynamic_dns
+      description: Activate dynamic DNS updates for your hostname using Cloudflare.
+      type: multiple_choice
+      choices:
+        - choice-value :  true
+          choice-description :  Activate dynamic DNS updates for your hostname using Cloudflare.
+        - choice-value :  false
+          choice-description :  Do not activate dynamic DNS updates for your hostname using Cloudflare. 
+      required: true
+      default: true
+      secret-settings:
+        secret: false
+        argon2: false
+    
+    - name: activate_admin_panel
+      description: Activate the admin panel for Vaultwarden.
+      type: multiple_choice
+      choices:
+        - choice-value :  true
+          choice-description :  Activate the admin panel for Vaultwarden.
+        - choice-value :  false
+          choice-description :  Do not activate the admin panel for Vaultwarden. 
+      required: true
+      default: true
+      secret-settings:
+        secret: false
+        argon2: false
+
+    - name: allow_only_cf_ips
+      description: Allow only Cloudflare IPs to access the Vaultwarden instance.
+      type: multiple_choice
+      choices:
+        - choice-value :  true
+          choice-description :  Allow only Cloudflare IPs to access the Vaultwarden instance.
+        - choice-value :  false
+          choice-description :  Do not restrict access to Cloudflare IPs. 
+      required: true
+      default: true
+      secret-settings:
+        secret: false
+        argon2: false
+
+    - name: enable_ufw
+      description: Enable UFW firewall and allow only necessary ports.
+      type: multiple_choice
+      choices:
+        - choice-value :  true
+          choice-description :  Enable UFW firewall and allow only necessary ports.
+        - choice-value :  false
+          choice-description :  Do not enable UFW firewall. 
+      required: true
+      default: true
+      secret-settings:
+        secret: false
+        argon2: false
+
+    - name: use_certbot
+      description: Use Certbot to obtain and renew SSL certificates for your hostname.
+      type: multiple_choice
+      choices:
+        - choice-value :  true
+          choice-description :  Use Certbot to obtain and renew SSL certificates for your hostname.
+        - choice-value :  false
+          choice-description :  Do not use Certbot for SSL certificates. 
+      required: true
+      default: true
+      secret-settings:
+        secret: false
+        argon2: false
+
+    - name: custom_logo_url
+      description: URL to a custom logo for the Vaultwarden web interface.
+      type: url
+      required: false
+      default: 
+      secret-settings:
+        secret: false
+        argon2: false

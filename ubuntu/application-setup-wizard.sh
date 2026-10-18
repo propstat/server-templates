@@ -1,6 +1,21 @@
 #!/bin/sh
 set -eu
 
+if [ "$(id -u)" -ne 0 ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
+        exit 1
+    fi
+
+    printf '%s\n' "Root privileges are required; requesting sudo." >&2
+    if ! sudo -v; then
+        printf '%s\n' "Error: Could not authenticate with sudo." >&2
+        exit 1
+    fi
+
+    exec sudo -n -- "$0" "$@"
+fi
+
 REPO_URL="https://github.com/propstat/server-templates.git"
 REPO_DIR="/tmp/server-templates"
 SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
@@ -47,21 +62,6 @@ ${RED}LICENSED UNDER THE PROPSTAT LICENSE. IF YOU CONTINUE${NC}
 ${RED}YOU AGREE TO THE LICENSE TERMS.${NC}
 =========================================================
 EOF
-
-if [ "$(id -u)" -ne 0 ]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-        printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
-        exit 1
-    fi
-
-    printf '%s\n' "Root privileges are required; requesting sudo." >&2
-    if ! sudo -v; then
-        printf '%s\n' "Error: Could not authenticate with sudo." >&2
-        exit 1
-    fi
-
-    exec sudo -n -- "$0" "$@"
-fi
 
 while true; do
     printf "Do you accept the license terms? (y/n): "
@@ -158,7 +158,11 @@ rm -rf "$REPO_DIR"
 git clone --sparse "$REPO_URL" "$REPO_DIR"
 
 # Check out the required files.
-git -C "$REPO_DIR" sparse-checkout set ubuntu/strategies ubuntu/propstatinstaller.sh ubuntu/helpers/confirm_continue.sh ubuntu/helpers/cf-ip.sh
+git -C "$REPO_DIR" sparse-checkout set --no-cone \
+    '/ubuntu/strategies/' \
+    '/ubuntu/propstatinstaller.sh' \
+    '/ubuntu/helpers/confirm_continue.sh' \
+    '/ubuntu/helpers/cf-ip.sh'
 
 # Synchronize files, overwriting existing files and deleting obsolete ones.
 rsync -a --delete "$SOURCE_DIR/" "$STRATEGIES_DIR/"

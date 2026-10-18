@@ -189,21 +189,4 @@ rm -rf "$REPO_DIR"
 
 printf '%s\n' "You can now use the command propstatinstaller to launch the application installer."
 printf '%s\n' "Use the command propstatinstaller to start an installation of a specific application."
-
-while true; do
-    printf "Do you accept want to install an Application now? (y/n): "
-    read -r reply
-
-    case "$reply" in
-        y|Y|yes|YES|Yes)
-            propstatinstaller
-            ;;
-        n|N|no|NO|No)
-            echo "Installation aborted."
-            exit 0
-            ;;
-        *)
-            echo "Invalid option. Please try again."
-            ;;
-    esac
-done
+exit 0

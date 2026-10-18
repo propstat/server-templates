@@ -1,6 +1,18 @@
 #!/bin/sh
 set -eu
 
+# Variables
+
+REPO_URL="https://github.com/propstat/server-templates.git"
+REPO_DIR="/tmp/server-templates"
+SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
+PROPSTAT_DIR="/etc/propstat"
+STRATEGIES_DIR="/etc/propstat/strategies"
+RED=$(printf '\033[0;31m')
+NC=$(printf '\033[0m')
+
+# Check for root privileges
+
 if [ "$(id -u)" -ne 0 ]; then
     if ! command -v sudo >/dev/null 2>&1; then
         printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
@@ -16,13 +28,6 @@ if [ "$(id -u)" -ne 0 ]; then
     exec sudo -n -- "$0" "$@"
 fi
 
-REPO_URL="https://github.com/propstat/server-templates.git"
-REPO_DIR="/tmp/server-templates"
-SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
-PROPSTAT_DIR="/etc/propstat"
-STRATEGIES_DIR="/etc/propstat/strategies"
-RED=$(printf '\033[0;31m')
-NC=$(printf '\033[0m')
 
 # ==========================================
 # LOGO
@@ -157,12 +162,9 @@ rm -rf "$REPO_DIR"
 # Clone the entire repository, including its history.
 git clone --sparse "$REPO_URL" "$REPO_DIR"
 
-# Check out the required files.
-git -C "$REPO_DIR" sparse-checkout set --no-cone \
-    '/ubuntu/strategies/' \
-    '/ubuntu/propstatinstaller.sh' \
-    '/ubuntu/helpers/confirm_continue.sh' \
-    '/ubuntu/helpers/cf-ip.sh'
+# Check out strategies and helpers. Cone mode also includes scripts directly
+# inside ubuntu/, including the installer scripts.
+git -C "$REPO_DIR" sparse-checkout set ubuntu/strategies ubuntu/helpers
 
 # Synchronize files, overwriting existing files and deleting obsolete ones.
 rsync -a --delete "$SOURCE_DIR/" "$STRATEGIES_DIR/"

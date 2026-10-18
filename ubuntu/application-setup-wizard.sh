@@ -196,7 +196,6 @@ while true; do
 
     case "$reply" in
         y|Y|yes|YES|Yes)
-            break
             propstatinstaller
             ;;
         n|N|no|NO|No)

@@ -55,7 +55,12 @@ if [ "$(id -u)" -ne 0 ]; then
     fi
 
     printf '%s\n' "Root privileges are required; requesting sudo." >&2
-    exec sudo -- "$0" "$@"
+    if ! sudo -v; then
+        printf '%s\n' "Error: Could not authenticate with sudo." >&2
+        exit 1
+    fi
+
+    exec sudo -n -- "$0" "$@"
 fi
 
 while true; do

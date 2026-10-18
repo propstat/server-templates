@@ -1,16 +1,6 @@
 #!/bin/sh
 set -eu
 
-if [ "$(id -u)" -ne 0 ]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-        printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
-        exit 1
-    fi
-
-    printf '%s\n' "Root privileges are required; requesting sudo." >&2
-    exec sudo -- "$0" "$@"
-fi
-
 REPO_URL="https://github.com/propstat/server-templates.git"
 REPO_DIR="/tmp/server-templates"
 SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
@@ -57,6 +47,16 @@ ${RED}LICENSED UNDER THE PROPSTAT LICENSE. IF YOU CONTINUE${NC}
 ${RED}YOU AGREE TO THE LICENSE TERMS.${NC}
 =========================================================
 EOF
+
+if [ "$(id -u)" -ne 0 ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
+        exit 1
+    fi
+
+    printf '%s\n' "Root privileges are required; requesting sudo." >&2
+    exec sudo -- "$0" "$@"
+fi
 
 while true; do
     printf "Do you accept the license terms? (y/n): "

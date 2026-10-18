@@ -2,7 +2,8 @@
 ---
 name: vaultwarden
 description: Vaultwarden is a lightweight and self-hosted password manager.
-environmentFile: /etc/propstat/vaultwarden.env
+environmentFile: /etc/propstat/conf/vaultwarden/vaultwarden.env
+iniFile: /etc/propstat/conf/vaultwarden/vaultwarden.ini
 
 installation:
   - dependencies:
@@ -77,13 +78,13 @@ variables:
         secret: false
         argon2: false
     
-    - name: activate_dynamic_dns
+    - name: cloudflare_ddns_restart_policy
       description: Activate dynamic DNS updates for your hostname using Cloudflare.
       type: multiple_choice
       choices:
-        - choice-value :  true
+        - choice-value :  unless-stopped
           choice-description :  Activate dynamic DNS updates for your hostname using Cloudflare.
-        - choice-value :  false
+        - choice-value :  no
           choice-description :  Do not activate dynamic DNS updates for your hostname using Cloudflare. 
       required: true
       default: true

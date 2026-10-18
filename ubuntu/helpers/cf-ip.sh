@@ -4,6 +4,16 @@
 
 set -eu
 
+if [ "$(id -u)" -ne 0 ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf '%s\n' "Error: sudo is required to update Cloudflare IP ranges." >&2
+        exit 1
+    fi
+
+    printf '%s\n' "Root privileges are required; requesting sudo." >&2
+    exec sudo -- "$0" "$@"
+fi
+
 # Configuration
 CONFIG_DIR="/etc/propstat/global"
 IPV4_FILE="${CONFIG_DIR}/cfipv4"

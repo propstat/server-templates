@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+if [ "$(id -u)" -ne 0 ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
+        exit 1
+    fi
+
+    printf '%s\n' "Root privileges are required; requesting sudo." >&2
+    exec sudo -- "$0" "$@"
+fi
+
 REPO_URL="https://github.com/propstat/server-templates.git"
 REPO_DIR="/tmp/server-templates"
 SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
@@ -100,12 +110,6 @@ else
     done
 fi
 
-# System installation and removal require root privileges.
-if [ "$(id -u)" -ne 0 ]; then
-    printf '%s\n' "Error: Run this script as root to install or remove Propstat." >&2
-    exit 1
-fi
-
 if [ "$ACTION" = remove ]; then
     rm -rf "$PROPSTAT_DIR"
     rm -f /usr/local/bin/propstatinstaller \
@@ -169,5 +173,27 @@ printf '%s\n' "Scheduling daily Cloudflare IP range updates."
 printf '%s\n' "0 3 * * * root /usr/local/bin/cf-ip" > /etc/cron.d/propstat-cf-ip
 chmod 644 /etc/cron.d/propstat-cf-ip
 
-# Remove the temporary checkout.
+# Clean up the temporary checkout.
 rm -rf "$REPO_DIR"
+
+printf '%s\n' "You can now use the command propstatinstaller to launch the application installer."
+printf '%s\n' "Use the command propstatinstaller to start an installation of a specific application."
+
+while true; do
+    printf "Do you accept want to install an Application now? (y/n): "
+    read -r reply
+
+    case "$reply" in
+        y|Y|yes|YES|Yes)
+            break
+            propstatinstaller
+            ;;
+        n|N|no|NO|No)
+            echo "Installation aborted."
+            exit 0
+            ;;
+        *)
+            echo "Invalid option. Please try again."
+            ;;
+    esac
+done

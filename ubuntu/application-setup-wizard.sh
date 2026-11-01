@@ -130,9 +130,11 @@ if [ "$ACTION" = remove ]; then
 
     rm -rf "$PROPSTAT_DIR"
     rm -f /usr/local/bin/propstatinstaller \
+        /usr/bin/confirm_continue \
         /usr/bin/confirm_continue.sh \
         /usr/local/bin/confirm_continue.sh \
         /usr/local/bin/autoupdate \
+        /usr/local/bin/timezone \
         /usr/local/sbin/propstat-autoupdate \
         /usr/local/bin/cf-ip \
         /usr/local/bin/cf-ip.sh \
@@ -195,16 +197,18 @@ printf '%s\n' "Linking installer commands to the project checkout."
 
 install -d /usr/local/bin
 ln -sfn "$REPO_DIR/ubuntu/propstatinstaller.sh" /usr/local/bin/propstatinstaller
-ln -sfn "$REPO_DIR/ubuntu/helpers/confirm_continue.sh" /usr/bin/confirm_continue.sh
+ln -sfn "$REPO_DIR/ubuntu/helpers/confirm_continue.sh" /usr/bin/confirm_continue
+rm -f /usr/bin/confirm_continue.sh
 ln -sfn "$REPO_DIR/ubuntu/helpers/cf-ip.sh" /usr/local/bin/cf-ip
 ln -sfn "$REPO_DIR/ubuntu/helpers/autoupdate.sh" /usr/local/bin/autoupdate
+ln -sfn "$REPO_DIR/ubuntu/helpers/timezone.sh" /usr/local/bin/timezone
 
 printf '%s\n' "Scheduling daily Cloudflare IP range updates."
 printf '%s\n' "0 3 * * * root /usr/local/bin/cf-ip" > /etc/cron.d/propstat-cf-ip
 chmod 644 /etc/cron.d/propstat-cf-ip
 
 # Automatic Updates
-. /usr/bin/confirm_continue.sh
+. /usr/bin/confirm_continue
 confirm_continue -y \
     -startmsg="Do you want to update your Ubuntu Server automatically?" \
     on_no="echo 'The machine will not automatically update and reboot.'" \

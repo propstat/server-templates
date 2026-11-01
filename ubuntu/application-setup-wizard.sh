@@ -179,6 +179,8 @@ cp "$REPO_DIR/ubuntu/helpers/confirm_continue.sh" /usr/local/bin/confirm_continu
 chmod +x /usr/local/bin/confirm_continue.sh
 cp "$REPO_DIR/ubuntu/helpers/cf-ip.sh" /usr/local/bin/cf-ip
 chmod +x /usr/local/bin/cf-ip
+cp "$REPO_DIR/ubuntu/helpers/autoupdate.sh" /usr/local/bin/autoupdate
+chmod +x /usr/local/bin/autoupdate
 
 printf '%s\n' "Scheduling daily Cloudflare IP range updates."
 printf '%s\n' "0 3 * * * root /usr/local/bin/cf-ip" > /etc/cron.d/propstat-cf-ip
@@ -192,7 +194,7 @@ rm -rf "$REPO_DIR"
 confirm_continue -y \
     -startmsg="Do you want to update your Ubuntu Server automatically?" \
     on_no="echo 'The machine will not automatically update and reboot.'" \
-    on_yes=""
+    on_yes="/usr/local/bin/autoupdate"
 
 printf '%s\n' "You can now use the command propstatinstaller to launch the application installer."
 printf '%s\n' "Use the command propstatinstaller to start an installation of a specific application."

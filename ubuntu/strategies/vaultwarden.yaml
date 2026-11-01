@@ -53,8 +53,8 @@ variables:
         secret: false
         argon2: false
     
-    - name: dns_cloudflare_api_token
-      description: Your Cloudflare API token with DNS edit permissions.
+    - name: dns_cloudflare_api_token_certbot
+      description: Your Cloudflare API token with DNS edit permissions for Certbot.
       type: string
       required: true
       secret-settings:

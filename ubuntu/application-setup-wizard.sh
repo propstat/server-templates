@@ -55,7 +55,7 @@ iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii
 ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii  
 
 =========================================================
-Common Applications Installer
+Common Applications Installer Setup Wizard
 =========================================================
 Non-Commercial use is free of charge, please consult our
 license for commercial use.
@@ -185,7 +185,14 @@ printf '%s\n' "0 3 * * * root /usr/local/bin/cf-ip" > /etc/cron.d/propstat-cf-ip
 chmod 644 /etc/cron.d/propstat-cf-ip
 
 # Clean up the temporary checkout.
+printf '%s\n' "Cleaning up temporary files."
 rm -rf "$REPO_DIR"
+
+# Automatic Updates
+confirm_continue -y \
+    -startmsg="Do you want to update your Ubuntu Server automatically?" \
+    on_no="echo 'The machine will not automatically update and reboot.'" \
+    on_yes=""
 
 printf '%s\n' "You can now use the command propstatinstaller to launch the application installer."
 printf '%s\n' "Use the command propstatinstaller to start an installation of a specific application."

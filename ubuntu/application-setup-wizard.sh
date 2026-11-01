@@ -4,7 +4,7 @@ set -eu
 # Variables
 
 REPO_URL="https://github.com/propstat/server-templates.git"
-REPO_DIR="/tmp/server-templates"
+REPO_DIR="/opt/propstat/server-templates"
 SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
 PROPSTAT_DIR="/etc/propstat"
 STRATEGIES_DIR="/etc/propstat/strategies"
@@ -121,12 +121,23 @@ else
 fi
 
 if [ "$ACTION" = remove ]; then
+    if [ -f /etc/systemd/system/propstat-autoupdate.timer ]; then
+        systemctl disable --now propstat-autoupdate.timer
+        rm -f /etc/systemd/system/propstat-autoupdate.timer \
+            /etc/systemd/system/propstat-autoupdate.service
+        systemctl daemon-reload
+    fi
+
     rm -rf "$PROPSTAT_DIR"
     rm -f /usr/local/bin/propstatinstaller \
+        /usr/bin/confirm_continue.sh \
         /usr/local/bin/confirm_continue.sh \
+        /usr/local/bin/autoupdate \
+        /usr/local/sbin/propstat-autoupdate \
         /usr/local/bin/cf-ip \
         /usr/local/bin/cf-ip.sh \
         /etc/cron.d/propstat-cf-ip
+    rm -rf "$REPO_DIR"
     printf '%s\n' "Propstat installation and its cronjob have been removed."
     exit 0
 fi
@@ -155,12 +166,22 @@ fi
 
 # Ensure the destination exists.
 install -d "$STRATEGIES_DIR"
+install -d "$(dirname "$REPO_DIR")"
 
-# Remove any previous temporary checkout.
-rm -rf "$REPO_DIR"
-
-# Clone the entire repository, including its history.
-git clone --sparse "$REPO_URL" "$REPO_DIR"
+if [ -d "$REPO_DIR/.git" ]; then
+    REPO_ORIGIN=$(git -C "$REPO_DIR" remote get-url origin)
+    if [ "$REPO_ORIGIN" != "$REPO_URL" ]; then
+        printf 'Error: %s is already a checkout of a different repository.\n' "$REPO_DIR" >&2
+        exit 1
+    fi
+    git -C "$REPO_DIR" pull --ff-only origin main
+elif [ -e "$REPO_DIR" ]; then
+    printf 'Error: %s exists and is not a Git checkout.\n' "$REPO_DIR" >&2
+    exit 1
+else
+    # Clone the repository, including its history, into a persistent location.
+    git clone --sparse --branch main "$REPO_URL" "$REPO_DIR"
+fi
 
 # Check out strategies and helpers. Cone mode also includes scripts directly
 # inside ubuntu/, including the installer scripts.
@@ -170,27 +191,20 @@ git -C "$REPO_DIR" sparse-checkout set ubuntu/strategies ubuntu/helpers
 rsync -a --delete "$SOURCE_DIR/" "$STRATEGIES_DIR/"
 
 printf '%s\n' "Strategies installed successfully."
-printf '%s\n' "Adding installer to /usr/local/bin."
+printf '%s\n' "Linking installer commands to the project checkout."
 
 install -d /usr/local/bin
-cp "$REPO_DIR/ubuntu/propstatinstaller.sh" /usr/local/bin/propstatinstaller
-chmod +x /usr/local/bin/propstatinstaller
-cp "$REPO_DIR/ubuntu/helpers/confirm_continue.sh" /usr/local/bin/confirm_continue.sh
-chmod +x /usr/local/bin/confirm_continue.sh
-cp "$REPO_DIR/ubuntu/helpers/cf-ip.sh" /usr/local/bin/cf-ip
-chmod +x /usr/local/bin/cf-ip
-cp "$REPO_DIR/ubuntu/helpers/autoupdate.sh" /usr/local/bin/autoupdate
-chmod +x /usr/local/bin/autoupdate
+ln -sfn "$REPO_DIR/ubuntu/propstatinstaller.sh" /usr/local/bin/propstatinstaller
+ln -sfn "$REPO_DIR/ubuntu/helpers/confirm_continue.sh" /usr/bin/confirm_continue.sh
+ln -sfn "$REPO_DIR/ubuntu/helpers/cf-ip.sh" /usr/local/bin/cf-ip
+ln -sfn "$REPO_DIR/ubuntu/helpers/autoupdate.sh" /usr/local/bin/autoupdate
 
 printf '%s\n' "Scheduling daily Cloudflare IP range updates."
 printf '%s\n' "0 3 * * * root /usr/local/bin/cf-ip" > /etc/cron.d/propstat-cf-ip
 chmod 644 /etc/cron.d/propstat-cf-ip
 
-# Clean up the temporary checkout.
-printf '%s\n' "Cleaning up temporary files."
-rm -rf "$REPO_DIR"
-
 # Automatic Updates
+. /usr/bin/confirm_continue.sh
 confirm_continue -y \
     -startmsg="Do you want to update your Ubuntu Server automatically?" \
     on_no="echo 'The machine will not automatically update and reboot.'" \

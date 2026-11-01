@@ -2,7 +2,7 @@
 set -eu
 
 SERVICE_NAME="propstat-autoupdate"
-INSTALL_PATH="/usr/local/sbin/${SERVICE_NAME}"
+COMMAND_PATH="/usr/local/bin/autoupdate"
 SYSTEMD_DIR="/etc/systemd/system"
 SERVICE_FILE="${SYSTEMD_DIR}/${SERVICE_NAME}.service"
 TIMER_FILE="${SYSTEMD_DIR}/${SERVICE_NAME}.timer"
@@ -141,7 +141,7 @@ if [ "$(id -u)" -ne 0 ]; then
     exec sudo -n -- "$SCRIPT_PATH" --frequency "$FREQUENCY" --time "$TIME"
 fi
 
-for command_name in install systemctl; do
+for command_name in install ln systemctl; do
     command -v "$command_name" >/dev/null 2>&1 ||
         fail "Required command not found: $command_name"
 done
@@ -149,6 +149,11 @@ done
 [ -x /usr/bin/apt-get ] || fail "apt-get was not found at /usr/bin/apt-get."
 [ -x /usr/sbin/reboot ] || fail "reboot was not found at /usr/sbin/reboot."
 [ -d "$SYSTEMD_DIR" ] || fail "systemd unit directory not found: $SYSTEMD_DIR"
+
+if [ ! -x "$COMMAND_PATH" ]; then
+    ln -sfn "$SCRIPT_PATH" "$COMMAND_PATH" ||
+        fail "Could not link the update command at $COMMAND_PATH."
+fi
 
 case $FREQUENCY in
     daily) CALENDAR="*-*-* ${TIME}:00" ;;
@@ -167,7 +172,7 @@ Description=Update Ubuntu packages and reboot
 
 [Service]
 Type=oneshot
-ExecStart=${INSTALL_PATH} --run
+ExecStart=${COMMAND_PATH} --run
 TimeoutStartSec=infinity
 EOF
 
@@ -183,8 +188,6 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-install -o root -g root -m 755 "$SCRIPT_PATH" "$INSTALL_PATH" ||
-    fail "Could not install the update runner at $INSTALL_PATH."
 install -o root -g root -m 644 "${TMP_DIR}/${SERVICE_NAME}.service" "$SERVICE_FILE" ||
     fail "Could not install the systemd service."
 install -o root -g root -m 644 "${TMP_DIR}/${SERVICE_NAME}.timer" "$TIMER_FILE" ||

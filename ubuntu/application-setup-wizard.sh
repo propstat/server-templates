@@ -30,6 +30,23 @@ PS_BOLD=$(printf '\033[1m')
 PS_DIM=$(printf '\033[2m')
 NC=$(printf '\033[0m')
 
+# Check for root privileges
+
+if [ "$(id -u)" -ne 0 ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
+        exit 1
+    fi
+
+    printf '%s\n' "Root privileges are required; requesting sudo." >&2
+    if ! sudo -v; then
+        printf '%s\n' "Error: Could not authenticate with sudo." >&2
+        exit 1
+    fi
+
+    exec sudo -n -- "$0" "$@"
+fi
+
 # ==========================================
 # LOGO
 # ==========================================
@@ -88,22 +105,7 @@ while true; do
     esac
 done
 
-# Check for root privileges
 
-if [ "$(id -u)" -ne 0 ]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-        printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
-        exit 1
-    fi
-
-    printf '%s\n' "Root privileges are required; requesting sudo." >&2
-    if ! sudo -v; then
-        printf '%s\n' "Error: Could not authenticate with sudo." >&2
-        exit 1
-    fi
-
-    exec sudo -n -- "$0" "$@"
-fi
 
 if [ -d "$PROPSTAT_DIR" ]; then
     printf '%s\n' "An existing Propstat installation was found."

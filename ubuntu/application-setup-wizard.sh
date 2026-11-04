@@ -129,7 +129,6 @@ else
         "1) Install" \
         "2) Abort"
 fi
-printf '%s\n' "========================================================="
 
 while true; do
     if [ "$HAS_INSTALLATION" -eq 1 ]; then
@@ -209,10 +208,15 @@ if ! command -v dig >/dev/null 2>&1; then
 fi
 
 if [ -n "$packages" ]; then
+    printf '%s\n' "${PS_GREEN}${PS_BOLD}Running apt-get update...${NC}"
     apt-get update
     # Intentional word splitting: packages contains package names only.
     # shellcheck disable=SC2086
+    printf '%s\n' "${PS_GREEN}${PS_BOLD}Installing missing packages...${NC}"
+    printf '%s\n' "${PS_GREEN}${PS_BOLD}Packages to install:${NC}"
+    printf '%s\n' "${PS_GREEN}${PS_BOLD}$packages${NC}"
     apt-get install -y $packages
+    printf '%s\n' "${PS_GREEN}${PS_BOLD}Packages installed successfully.${NC}"
 fi
 
 # Ensure the destination exists.
@@ -247,7 +251,6 @@ printf '%s\n' "Linking installer commands to the project checkout."
 install -d /usr/bin
 ln -sfn "$REPO_DIR/ubuntu/propstatinstaller.sh" /usr/bin/propstatinstaller
 ln -sfn "$REPO_DIR/ubuntu/helpers/confirm_continue.sh" /usr/bin/confirm_continue
-rm -f /usr/bin/confirm_continue.sh
 ln -sfn "$REPO_DIR/ubuntu/helpers/cf-ip.sh" /usr/bin/cf-ip
 ln -sfn "$REPO_DIR/ubuntu/helpers/autoupdate.sh" /usr/bin/autoupdate
 ln -sfn "$REPO_DIR/ubuntu/helpers/change_ip.sh" /usr/bin/change-ip
@@ -280,6 +283,8 @@ else
     printf '%s\n' "Public IP could not be determined."
     printf '%s\n' "If this service is accessible from the internet, please configure your network settings now."
 fi
+
+
 
 confirm_continue -y \
     -startmsg="Do you want to configure your network settings?" \

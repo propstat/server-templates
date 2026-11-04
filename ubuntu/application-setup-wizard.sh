@@ -155,19 +155,10 @@ if [ "$ACTION" = remove ]; then
     rm -rf "$PROPSTAT_DIR"
     rm -f /usr/bin/propstatinstaller \
         /usr/bin/confirm_continue \
-        /usr/bin/confirm_continue.sh \
         /usr/bin/cf-ip \
         /usr/bin/autoupdate \
         /usr/bin/change-ip \
         /usr/bin/timezone \
-        /usr/local/bin/propstatinstaller \
-        /usr/local/bin/confirm_continue.sh \
-        /usr/local/bin/autoupdate \
-        /usr/local/bin/change-ip \
-        /usr/local/bin/timezone \
-        /usr/local/sbin/propstat-autoupdate \
-        /usr/local/bin/cf-ip \
-        /usr/local/bin/cf-ip.sh \
         /etc/cron.d/propstat-cf-ip
     rm -rf "$REPO_DIR"
     printf '%s\n' "Propstat installation and its cronjob have been removed."

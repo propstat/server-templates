@@ -9,6 +9,11 @@ SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
 PROPSTAT_DIR="/etc/propstat"
 STRATEGIES_DIR="/etc/propstat/strategies"
 RED=$(printf '\033[0;31m')
+BLUE=$(printf '\033[0;34m')
+CYAN=$(printf '\033[0;36m')
+LIGHT_BLUE=$(printf '\033[1;34m')
+GREEN=$(printf '\033[0;32m')
+ORANGE=$(printf '\033[0;33m')
 NC=$(printf '\033[0m')
 
 # Check for root privileges
@@ -34,38 +39,38 @@ fi
 # ==========================================
 cat << EOF
 
-=========================================================
+${ORANGE}=========================================================${NC}
 
-            il*%%%%*             i%%%%%%%           
-           iiiI*%%%%%           iii*%%%%*%          
-          iiiiii%%%%%%         iiiii%*%%%*%         
-         iiiiiii %%%%%%       iiiiii %*%%%%%        
-        iiiiiii   *%%%%%%   iiiiiii   **%%%%*       
-       iiiiiii     *%%%%%% iiiiiii     %*%%%%*      
-      iiiiiii       **%%%**iiiiii       *%%%%*%     
-     iiiiiii         *%%%%*<iiii         **%%%**    
-    iiiiiii           %*%%%**ii           *%%%%*%   
-   iiiiiiiiiiiiiiiiiiii%%%%%%*%%%%%%%%%%%%%%%%%%%*  
-  iiiiiiiiiiiiiiiiiiiiii%*%%%%%%%%%%%%%%%%%%%%%%%%* 
- iiiiiiiiiiiiiiiiiiiiiiii**%%%%%%%%%%%%%%%%%%%%%%%%%
+            ${BLUE}il${NC}${LIGHT_BLUE}*%%%%*              ${BLUE}i${NC}${LIGHT_BLUE}%%%%%%%${NC}           
+           ${BLUE}iiiI${NC}${LIGHT_BLUE}*%%%%%            ${BLUE}iii${NC}${LIGHT_BLUE}*%%%%*%${NC}          
+          ${BLUE}iiiiii${NC}${LIGHT_BLUE}%%%%%%          ${BLUE}iiiii${NC}${LIGHT_BLUE}%*%%%*%${NC}         
+         ${BLUE}iiiiiii ${NC}${LIGHT_BLUE}%%%%%%        ${BLUE}iiiiii${NC} ${LIGHT_BLUE}%*%%%%%${NC}        
+        ${BLUE}iiiiiii   ${NC}${LIGHT_BLUE}*%%%%%%    ${BLUE}iiiiiii${NC}   ${LIGHT_BLUE}**%%%%*${NC}       
+       ${BLUE}iiiiiii     ${NC}${LIGHT_BLUE}*%%%%%%  ${BLUE}iiiiiii${NC}     ${LIGHT_BLUE}%*%%%%*${NC}      
+      ${BLUE}iiiiiii       ${NC}${LIGHT_BLUE}**%%%**${BLUE}iiiiii${NC}       ${LIGHT_BLUE}*%%%%*%${NC}     
+     ${BLUE}iiiiiii         ${NC}${LIGHT_BLUE}*%%%%*${BLUE}<iiii${NC}         ${LIGHT_BLUE}**%%%**${NC}    
+    ${BLUE}iiiiiii           ${NC}${LIGHT_BLUE}%*%%${BLUE}%**ii${NC}           ${LIGHT_BLUE}*%%%%*%${NC}   
+   ${BLUE}iiiiiiiiiiiiiiiiiiii${NC}${LIGHT_BLUE}%%%%%%*%%%%%%%%%%%%%%%%%%%*${NC}  
+  ${BLUE}iiiiiiiiiiiiiiiiiiiiii${NC}${LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
+ ${BLUE}iiiiiiiiiiiiiiiiiiiiiiii${NC}${LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}
                                                    
-iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii
-ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii  
-iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii  
-ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii  
+${BLUE}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
+${BLUE}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
+${BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
+${BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
 
-=========================================================
+${ORANGE}=========================================================${NC}
 Common Applications Installer Setup Wizard
-=========================================================
+${ORANGE}=========================================================${NC}
 Non-Commercial use is free of charge, please consult our
 license for commercial use.
 Please use the following link to view the license:
 https://github.com/propstat/server-templates?tab=License-1-ov-file
-=========================================================
+${ORANGE}=========================================================${NC}
 ${RED}YOU ARE DOWNLOADING MATERIAL COVERED BY COPYRIGHT AND${NC}
 ${RED}LICENSED UNDER THE PROPSTAT LICENSE. IF YOU CONTINUE${NC}
 ${RED}YOU AGREE TO THE LICENSE TERMS.${NC}
-=========================================================
+${ORANGE}=========================================================${NC}
 EOF
 
 while true; do

@@ -97,7 +97,7 @@ if [ -z "$TIME" ]; then
     while :; do
         printf '%s\n' \
             "Enter the local time using 24-hour HH:MM format (hours 00-23, minutes 00-59)." \
-            "For example, enter 03:30 for 3:30 AM."
+            "For example, enter 16:30 for 4:30 PM or 03:30 for 3:30 AM."
         printf '%s' "Time [HH:MM]: "
         if ! IFS= read -r TIME; then
             fail "Could not read the update time from input."

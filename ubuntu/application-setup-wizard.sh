@@ -218,7 +218,7 @@ chmod 644 /etc/cron.d/propstat-cf-ip
 . /usr/bin/confirm_continue
 
 # Determine the public IP using Cloudflare DNS, then Google DNS as a fallback.
-PUBLIC_IP=$(dig +short +time=2 +tries=1 TXT whoami.cloudflare @1.1.1.1 2>/dev/null |
+PUBLIC_IP=$(dig +short +time=2 +tries=1 TXT CH whoami.cloudflare @1.0.0.1 2>/dev/null |
     sed -n '1{s/^"//;s/"$//;p;}')
 if [ -z "$PUBLIC_IP" ]; then
     PUBLIC_IP=$(dig +short +time=2 +tries=1 TXT o-o.myaddr.l.google.com @8.8.8.8 2>/dev/null |

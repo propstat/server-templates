@@ -123,6 +123,7 @@ fi
 if [ "$ACTION" = remove ]; then
     if [ -f /etc/systemd/system/propstat-autoupdate.timer ]; then
         systemctl disable --now propstat-autoupdate.timer
+        systemctl clean --what=state propstat-autoupdate.timer
         rm -f /etc/systemd/system/propstat-autoupdate.timer \
             /etc/systemd/system/propstat-autoupdate.service
         systemctl daemon-reload
@@ -213,6 +214,9 @@ printf '%s\n' "Scheduling daily Cloudflare IP range updates."
 printf '%s\n' "0 3 * * * root /usr/local/bin/cf-ip" > /etc/cron.d/propstat-cf-ip
 chmod 644 /etc/cron.d/propstat-cf-ip
 
+# Load the confirmation helper for the public IP check and update prompt.
+. /usr/bin/confirm_continue
+
 # Determine the public IP using Cloudflare DNS, then Google DNS as a fallback.
 PUBLIC_IP=$(dig +short +time=2 +tries=1 TXT whoami.cloudflare @1.1.1.1 2>/dev/null |
     sed -n '1{s/^"//;s/"$//;p;}')
@@ -223,13 +227,18 @@ fi
 
 if [ -n "$PUBLIC_IP" ]; then
     printf 'Public IP: %s\n' "$PUBLIC_IP"
+    confirm_continue -y \
+        -startmsg="Is this the correct public IP address?" \
+        -endmsg= \
+        msg_yes="Keeping the current network configuration." \
+        msg_no="Starting network configuration." \
+        on_no="change-ip"
 else
     printf '%s\n' "Public IP could not be determined."
     change-ip
 fi
 
 # Automatic Updates
-. /usr/bin/confirm_continue
 confirm_continue -y \
     -startmsg="Do you want to update your Ubuntu Server automatically?" \
     on_no="echo 'The machine will not automatically update and reboot.'" \

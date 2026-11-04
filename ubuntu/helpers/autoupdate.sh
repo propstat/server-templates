@@ -182,7 +182,7 @@ Description=Scheduled Propstat automatic updates
 
 [Timer]
 OnCalendar=${CALENDAR}
-Persistent=true
+Persistent=false
 
 [Install]
 WantedBy=timers.target

@@ -41,23 +41,23 @@ cat << EOF
 
 ${ORANGE}=========================================================${NC}
 
-            ${BLUE}il${NC}${LIGHT_BLUE}*%%%%*              ${BLUE}i${NC}${LIGHT_BLUE}%%%%%%%${NC}           
-           ${BLUE}iiiI${NC}${LIGHT_BLUE}*%%%%%            ${BLUE}iii${NC}${LIGHT_BLUE}*%%%%*%${NC}          
-          ${BLUE}iiiiii${NC}${LIGHT_BLUE}%%%%%%          ${BLUE}iiiii${NC}${LIGHT_BLUE}%*%%%*%${NC}         
-         ${BLUE}iiiiiii ${NC}${LIGHT_BLUE}%%%%%%        ${BLUE}iiiiii${NC} ${LIGHT_BLUE}%*%%%%%${NC}        
-        ${BLUE}iiiiiii   ${NC}${LIGHT_BLUE}*%%%%%%    ${BLUE}iiiiiii${NC}   ${LIGHT_BLUE}**%%%%*${NC}       
-       ${BLUE}iiiiiii     ${NC}${LIGHT_BLUE}*%%%%%%  ${BLUE}iiiiiii${NC}     ${LIGHT_BLUE}%*%%%%*${NC}      
-      ${BLUE}iiiiiii       ${NC}${LIGHT_BLUE}**%%%**${BLUE}iiiiii${NC}       ${LIGHT_BLUE}*%%%%*%${NC}     
-     ${BLUE}iiiiiii         ${NC}${LIGHT_BLUE}*%%%%*${BLUE}<iiii${NC}         ${LIGHT_BLUE}**%%%**${NC}    
-    ${BLUE}iiiiiii           ${NC}${LIGHT_BLUE}%*%%${BLUE}%**ii${NC}           ${LIGHT_BLUE}*%%%%*%${NC}   
-   ${BLUE}iiiiiiiiiiiiiiiiiiii${NC}${LIGHT_BLUE}%%%%%%*%%%%%%%%%%%%%%%%%%%*${NC}  
-  ${BLUE}iiiiiiiiiiiiiiiiiiiiii${NC}${LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
- ${BLUE}iiiiiiiiiiiiiiiiiiiiiiii${NC}${LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}
+            ${BLUE}il${LIGHT_BLUE}*%%%%*              ${BLUE}i${LIGHT_BLUE}%%%%%%%${NC}           
+           ${BLUE}iiiI${LIGHT_BLUE}*%%%%%            ${BLUE}iii${LIGHT_BLUE}*%%%%*%${NC}          
+          ${BLUE}iiiiii${LIGHT_BLUE}%%%%%%          ${BLUE}iiiii${LIGHT_BLUE}%*%%%*%${NC}         
+         ${BLUE}iiiiiii ${LIGHT_BLUE}%%%%%%        ${BLUE}iiiiii ${LIGHT_BLUE}%*%%%%%${NC}        
+        ${BLUE}iiiiiii   ${LIGHT_BLUE}*%%%%%%    ${BLUE}iiiiiii   ${LIGHT_BLUE}**%%%%*${NC}       
+       ${BLUE}iiiiiii     ${LIGHT_BLUE}*%%%%%%  ${BLUE}iiiiiii     ${LIGHT_BLUE}%*%%%%*${NC}      
+      ${BLUE}iiiiiii       ${LIGHT_BLUE}**%%%**${BLUE}iiiiii       ${LIGHT_BLUE}*%%%%*%${NC}     
+     ${BLUE}iiiiiii         ${LIGHT_BLUE}*%%%%*${BLUE}<iiii         ${LIGHT_BLUE}**%%%**${NC}    
+    ${BLUE}iiiiiii           ${LIGHT_BLUE}%*%%${BLUE}%**ii           ${LIGHT_BLUE}*%%%%*%${NC}   
+   ${BLUE}iiiiiiiiiiiiiiiiiiii${LIGHT_BLUE}%%%%%%*%%%%%%%%%%%%%%%%%%%*${NC}  
+  ${BLUE}iiiiiiiiiiiiiiiiiiiiii${LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
+ ${BLUE}iiiiiiiiiiiiiiiiiiiiiiii${LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}
                                                    
-${BLUE}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
-${BLUE}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
-${BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
-${BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
+${LIGHT_BLUE}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
+${LIGHT_BLUE}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
+${LIGHT_BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
+${LIGHT_BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
 
 ${ORANGE}=========================================================${NC}
 Common Applications Installer Setup Wizard

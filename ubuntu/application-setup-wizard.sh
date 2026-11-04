@@ -134,6 +134,7 @@ if [ "$ACTION" = remove ]; then
         /usr/bin/confirm_continue.sh \
         /usr/local/bin/confirm_continue.sh \
         /usr/local/bin/autoupdate \
+        /usr/local/bin/change-ip \
         /usr/local/bin/timezone \
         /usr/local/sbin/propstat-autoupdate \
         /usr/local/bin/cf-ip \
@@ -157,6 +158,10 @@ fi
 
 if ! command -v cron >/dev/null 2>&1; then
     packages="$packages cron"
+fi
+
+if ! command -v dig >/dev/null 2>&1; then
+    packages="$packages dnsutils"
 fi
 
 if [ -n "$packages" ]; then
@@ -201,18 +206,34 @@ ln -sfn "$REPO_DIR/ubuntu/helpers/confirm_continue.sh" /usr/bin/confirm_continue
 rm -f /usr/bin/confirm_continue.sh
 ln -sfn "$REPO_DIR/ubuntu/helpers/cf-ip.sh" /usr/local/bin/cf-ip
 ln -sfn "$REPO_DIR/ubuntu/helpers/autoupdate.sh" /usr/local/bin/autoupdate
+ln -sfn "$REPO_DIR/ubuntu/helpers/change_ip.sh" /usr/local/bin/change-ip
 ln -sfn "$REPO_DIR/ubuntu/helpers/timezone.sh" /usr/local/bin/timezone
 
 printf '%s\n' "Scheduling daily Cloudflare IP range updates."
 printf '%s\n' "0 3 * * * root /usr/local/bin/cf-ip" > /etc/cron.d/propstat-cf-ip
 chmod 644 /etc/cron.d/propstat-cf-ip
 
+# Determine the public IP using Cloudflare DNS, then Google DNS as a fallback.
+PUBLIC_IP=$(dig +short +time=2 +tries=1 TXT whoami.cloudflare @1.1.1.1 2>/dev/null |
+    sed -n '1{s/^"//;s/"$//;p;}')
+if [ -z "$PUBLIC_IP" ]; then
+    PUBLIC_IP=$(dig +short +time=2 +tries=1 TXT o-o.myaddr.l.google.com @8.8.8.8 2>/dev/null |
+        sed -n '1{s/^"//;s/"$//;p;}')
+fi
+
+if [ -n "$PUBLIC_IP" ]; then
+    printf 'Public IP: %s\n' "$PUBLIC_IP"
+else
+    printf '%s\n' "Public IP could not be determined."
+    change-ip
+fi
+
 # Automatic Updates
 . /usr/bin/confirm_continue
 confirm_continue -y \
     -startmsg="Do you want to update your Ubuntu Server automatically?" \
     on_no="echo 'The machine will not automatically update and reboot.'" \
-    on_yes="/usr/local/bin/autoupdate"
+    on_yes="autoupdate"
 
 printf '%s\n' "You can now use the command propstatinstaller to launch the application installer."
 printf '%s\n' "Use the command propstatinstaller to start an installation of a specific application."

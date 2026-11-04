@@ -88,7 +88,7 @@ ${PS_RED}${PS_BOLD}YOU AGREE TO THE LICENSE TERMS.${NC}
 EOF
 
 while true; do
-    printf "${PS_GREEN}${PS_BOLD}Do you accept the license terms? (y/n):${NC}"
+    printf "${PS_GREEN}${PS_BOLD}Do you accept the license terms? [y/n]:${NC}"
     read -r reply
 
     case "$reply" in
@@ -104,8 +104,6 @@ while true; do
             ;;
     esac
 done
-
-
 
 if [ -d "$PROPSTAT_DIR" ]; then
     printf '%s\n' "An existing Propstat installation was found."

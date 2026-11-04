@@ -141,8 +141,15 @@ fi
 
 if [ "$ACTION" = remove ]; then
     if [ -f /etc/systemd/system/propstat-autoupdate.timer ]; then
-        systemctl disable --now propstat-autoupdate.timer
-        systemctl clean --what=state propstat-autoupdate.timer
+        if systemctl is-active --quiet propstat-autoupdate.timer ||
+           systemctl is-enabled --quiet propstat-autoupdate.timer; then
+            systemctl disable --now propstat-autoupdate.timer
+        fi
+
+        if [ -e /var/lib/systemd/timers/stamp-propstat-autoupdate.timer ]; then
+            systemctl clean --what=state propstat-autoupdate.timer
+        fi
+
         rm -f /etc/systemd/system/propstat-autoupdate.timer \
             /etc/systemd/system/propstat-autoupdate.service
         systemctl daemon-reload

@@ -118,7 +118,7 @@ if [ -d "$PROPSTAT_DIR" ]; then
         case "$choice" in
             1) ACTION=install; break ;;
             2) ACTION=remove; break ;;
-            3) printf '%s\n' "${PS_RED}${PS_BOLD}Process aborted.${NC}"; exit 0 ;;
+            3) printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"; exit 0 ;;
             *) printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1, 2, or 3.${NC}" ;;
         esac
     done
@@ -133,7 +133,7 @@ else
 
         case "$choice" in
             1) ACTION=install; break ;;
-            2) printf '%s\n' "${PS_RED}${PS_BOLD}Process aborted.${NC}"; exit 0 ;;
+            2) printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"; exit 0 ;;
             *) printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1 or 2.${NC}" ;;
         esac
     done

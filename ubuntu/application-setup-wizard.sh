@@ -74,7 +74,7 @@ ${PS_DARK_BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}
 ${PS_DARK_BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
 
 =========================================================
-Common Applications Installer Setup Wizard
+${PS_GREEN}Common Applications Installer Setup Wizard${NC}
 =========================================================
 Non-Commercial use is free of charge, please consult our
 license for commercial use.

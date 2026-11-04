@@ -71,7 +71,7 @@ ${PS_RED}${PS_BOLD}YOU AGREE TO THE LICENSE TERMS.${NC}
 EOF
 
 while true; do
-    printf "Do you accept the license terms? (y/n): "
+    printf "${PS_GREEN}${PS_BOLD}Do you accept the license terms? (y/n):${NC}"
     read -r reply
 
     case "$reply" in

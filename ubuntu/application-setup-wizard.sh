@@ -8,13 +8,26 @@ REPO_DIR="/opt/propstat/server-templates"
 SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
 PROPSTAT_DIR="/etc/propstat"
 STRATEGIES_DIR="/etc/propstat/strategies"
-# Terminal colors
-RED=$(printf '\033[0;31m')
-BLUE=$(printf '\033[0;34m')
-LIGHT_BLUE=$(printf '\033[0;94m')
-CYAN=$(printf '\033[0;36m')
-GREEN=$(printf '\033[0;32m')
-ORANGE=$(printf '\033[38;5;208m')
+
+# ==============================================================================
+# PROPSTAT COLOR PALETTE
+# ==============================================================================
+
+# CI COLORS
+PS_DARK_BLUE=$(printf '\033[38;2;0;40;85m')       # #002855
+PS_LIGHT_BLUE=$(printf '\033[38;2;94;147;219m')   # #5E93DB
+PS_GREY=$(printf '\033[38;2;63;68;68m')                   # #3F4444
+PS_SKY_BLUE=$(printf '\033[38;2;221;229;237m')    # #DDE5ED
+
+# INTERFACE COLORS
+PS_RED=$(printf '\033[38;2;218;41;28m')            # #DA291C
+PS_ORANGE=$(printf '\033[38;2;253;170;99m')        # #FDAA63
+PS_YELLOW=$(printf '\033[38;2;250;224;83m')        # #FAE053
+PS_GREEN=$(printf '\033[38;2;92;170;127m')         # #5CAA7F
+
+# TERMINAL FORMATTING
+PS_BOLD=$(printf '\033[1m')
+PS_DIM=$(printf '\033[2m')
 NC=$(printf '\033[0m')
 
 # Check for root privileges
@@ -40,38 +53,38 @@ fi
 # ==========================================
 cat << EOF
 
-${ORANGE}=========================================================${NC}
+${PS_ORANGE}=========================================================${NC}
 
-            ${BLUE}il${LIGHT_BLUE}*%%%%*              ${BLUE}i${LIGHT_BLUE}%%%%%%%${NC}           
-           ${BLUE}iiiI${LIGHT_BLUE}*%%%%%            ${BLUE}iii${LIGHT_BLUE}*%%%%*%${NC}          
-          ${BLUE}iiiiii${LIGHT_BLUE}%%%%%%          ${BLUE}iiiii${LIGHT_BLUE}%*%%%*%${NC}         
-         ${BLUE}iiiiiii ${LIGHT_BLUE}%%%%%%        ${BLUE}iiiiii ${LIGHT_BLUE}%*%%%%%${NC}        
-        ${BLUE}iiiiiii   ${LIGHT_BLUE}*%%%%%%    ${BLUE}iiiiiii   ${LIGHT_BLUE}**%%%%*${NC}       
-       ${BLUE}iiiiiii     ${LIGHT_BLUE}*%%%%%%  ${BLUE}iiiiiii     ${LIGHT_BLUE}%*%%%%*${NC}      
-      ${BLUE}iiiiiii       ${LIGHT_BLUE}**%%%**${BLUE}iiiiii       ${LIGHT_BLUE}*%%%%*%${NC}     
-     ${BLUE}iiiiiii         ${LIGHT_BLUE}*%%%%*${BLUE}<iiii         ${LIGHT_BLUE}**%%%**${NC}    
-    ${BLUE}iiiiiii           ${LIGHT_BLUE}%*%%${BLUE}%**ii           ${LIGHT_BLUE}*%%%%*%${NC}   
-   ${BLUE}iiiiiiiiiiiiiiiiiiii${LIGHT_BLUE}%%%%%%*%%%%%%%%%%%%%%%%%%%*${NC}  
-  ${BLUE}iiiiiiiiiiiiiiiiiiiiii${LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
- ${BLUE}iiiiiiiiiiiiiiiiiiiiiiii${LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}
+            ${PS_DARK_BLUE}il${PS_LIGHT_BLUE}*%%%%*              ${PS_DARK_BLUE}i${PS_LIGHT_BLUE}%%%%%%%${NC}           
+           ${PS_DARK_BLUE}iiiI${PS_LIGHT_BLUE}*%%%%%            ${PS_DARK_BLUE}iii${PS_LIGHT_BLUE}*%%%%*%${NC}          
+          ${PS_DARK_BLUE}iiiiii${PS_LIGHT_BLUE}%%%%%%          ${PS_DARK_BLUE}iiiii${PS_LIGHT_BLUE}%*%%%*%${NC}         
+         ${PS_DARK_BLUE}iiiiiii ${PS_LIGHT_BLUE}%%%%%%        ${PS_DARK_BLUE}iiiiii ${PS_LIGHT_BLUE}%*%%%%%${NC}        
+        ${PS_DARK_BLUE}iiiiiii   ${PS_LIGHT_BLUE}*%%%%%%    ${PS_DARK_BLUE}iiiiiii   ${PS_LIGHT_BLUE}**%%%%*${NC}       
+       ${PS_DARK_BLUE}iiiiiii     ${PS_LIGHT_BLUE}*%%%%%%  ${PS_DARK_BLUE}iiiiiii     ${PS_LIGHT_BLUE}%*%%%%*${NC}      
+      ${PS_DARK_BLUE}iiiiiii       ${PS_LIGHT_BLUE}**%%%**${PS_DARK_BLUE}iiiiii       ${PS_LIGHT_BLUE}*%%%%*%${NC}     
+     ${PS_DARK_BLUE}iiiiiii         ${PS_LIGHT_BLUE}*%%%%*${PS_DARK_BLUE}<iiii         ${PS_LIGHT_BLUE}**%%%**${NC}    
+    ${PS_DARK_BLUE}iiiiiii           ${PS_LIGHT_BLUE}%*%%${PS_DARK_BLUE}%**ii           ${PS_LIGHT_BLUE}*%%%%*%${NC}   
+   ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}%%%%%%*%%%%%%%%%%%%%%%%%%%*${NC}  
+  ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
+ ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}
                                                    
-${LIGHT_BLUE}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
-${LIGHT_BLUE}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
-${LIGHT_BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
-${LIGHT_BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
+${PS_LIGHT_BLUE}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
+${PS_LIGHT_BLUE}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
+${PS_LIGHT_BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
+${PS_LIGHT_BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
 
-${ORANGE}=========================================================${NC}
+${PS_ORANGE}=========================================================${NC}
 Common Applications Installer Setup Wizard
-${ORANGE}=========================================================${NC}
+${PS_ORANGE}=========================================================${NC}
 Non-Commercial use is free of charge, please consult our
 license for commercial use.
 Please use the following link to view the license:
 https://github.com/propstat/server-templates?tab=License-1-ov-file
-${ORANGE}=========================================================${NC}
-${RED}YOU ARE DOWNLOADING MATERIAL COVERED BY COPYRIGHT AND${NC}
-${RED}LICENSED UNDER THE PROPSTAT LICENSE. IF YOU CONTINUE${NC}
-${RED}YOU AGREE TO THE LICENSE TERMS.${NC}
-${ORANGE}=========================================================${NC}
+${PS_ORANGE}=========================================================${NC}
+${PS_RED}YOU ARE DOWNLOADING MATERIAL COVERED BY COPYRIGHT AND${NC}
+${PS_RED}LICENSED UNDER THE PROPSTAT LICENSE. IF YOU CONTINUE${NC}
+${PS_RED}YOU AGREE TO THE LICENSE TERMS.${NC}
+${PS_ORANGE}=========================================================${NC}
 EOF
 
 while true; do

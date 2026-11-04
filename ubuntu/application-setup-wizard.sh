@@ -62,8 +62,8 @@ cat << EOF
         ${PS_DARK_BLUE}iiiiiii   ${PS_LIGHT_BLUE}*%%%%%%    ${PS_DARK_BLUE}iiiiiii   ${PS_LIGHT_BLUE}**%%%%*${NC}       
        ${PS_DARK_BLUE}iiiiiii     ${PS_LIGHT_BLUE}*%%%%%%  ${PS_DARK_BLUE}iiiiiii     ${PS_LIGHT_BLUE}%*%%%%*${NC}      
       ${PS_DARK_BLUE}iiiiiii       ${PS_LIGHT_BLUE}**%%%**${PS_DARK_BLUE}iiiiii       ${PS_LIGHT_BLUE}*%%%%*%${NC}     
-     ${PS_DARK_BLUE}iiiiiii         ${PS_LIGHT_BLUE}*%%%%*${PS_DARK_BLUE}<iiii         ${PS_LIGHT_BLUE}**%%%**${NC}    
-    ${PS_DARK_BLUE}iiiiiii           ${PS_LIGHT_BLUE}%*%%${PS_DARK_BLUE}%**ii           ${PS_LIGHT_BLUE}*%%%%*%${NC}   
+     ${PS_DARK_BLUE}iiiiiii         ${PS_LIGHT_BLUE}*%%%%*<${PS_DARK_BLUE}iiii         ${PS_LIGHT_BLUE}**%%%**${NC}    
+    ${PS_DARK_BLUE}iiiiiii           ${PS_LIGHT_BLUE}%*%%%**${PS_DARK_BLUE}ii           ${PS_LIGHT_BLUE}*%%%%*%${NC}   
    ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}%%%%%%*%%%%%%%%%%%%%%%%%%%*${NC}  
   ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
  ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}

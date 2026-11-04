@@ -56,14 +56,14 @@ cat << EOF
 =========================================================
 
             ${PS_DARK_BLUE}${PS_BOLD}il${PS_LIGHT_BLUE}*%%%%*              ${PS_DARK_BLUE}i${PS_LIGHT_BLUE}%%%%%%%${NC}           
-           ${PS_DARK_BLUE}${PS_BOLD}iiiI${PS_LIGHT_BLUE}*%%%%%            ${PS_DARK_BLUE}iii${PS_LIGHT_BLUE}*%%%%*%${NC}          
-          ${PS_DARK_BLUE}${PS_BOLD}iiiiii${PS_LIGHT_BLUE}%%%%%%          ${PS_DARK_BLUE}iiiii${PS_LIGHT_BLUE}%*%%%*%${NC}         
+           ${PS_DARK_BLUE}${PS_BOLD}iiiI${PS_LIGHT_BLUE}*%%%%%            ${PS_DARK_BLUE}iii${PS_LIGHT_BLUE}*%%%%%%${NC}          
+          ${PS_DARK_BLUE}${PS_BOLD}iiiiii${PS_LIGHT_BLUE}%%%%%%          ${PS_DARK_BLUE}iiiii${PS_LIGHT_BLUE}%*%%%%%${NC}         
          ${PS_DARK_BLUE}${PS_BOLD}iiiiiii ${PS_LIGHT_BLUE}%%%%%%        ${PS_DARK_BLUE}iiiiii ${PS_LIGHT_BLUE}%*%%%%%${NC}        
-        ${PS_DARK_BLUE}${PS_BOLD}iiiiiii   ${PS_LIGHT_BLUE}*%%%%%%    ${PS_DARK_BLUE}iiiiiii   ${PS_LIGHT_BLUE}**%%%%*${NC}       
-       ${PS_DARK_BLUE}${PS_BOLD}iiiiiii     ${PS_LIGHT_BLUE}*%%%%%%  ${PS_DARK_BLUE}iiiiiii     ${PS_LIGHT_BLUE}%*%%%%*${NC}      
-      ${PS_DARK_BLUE}${PS_BOLD}iiiiiii       ${PS_LIGHT_BLUE}**%%%**${PS_DARK_BLUE}iiiiii       ${PS_LIGHT_BLUE}*%%%%*%${NC}     
-     ${PS_DARK_BLUE}${PS_BOLD}iiiiiii         ${PS_LIGHT_BLUE}*%%%%*<${PS_DARK_BLUE}iiii         ${PS_LIGHT_BLUE}**%%%**${NC}    
-    ${PS_DARK_BLUE}${PS_BOLD}iiiiiii           ${PS_LIGHT_BLUE}%*%%%**${PS_DARK_BLUE}ii           ${PS_LIGHT_BLUE}*%%%%*%${NC}   
+        ${PS_DARK_BLUE}${PS_BOLD}iiiiiii   ${PS_LIGHT_BLUE}*%%%%%%    ${PS_DARK_BLUE}iiiiiii   ${PS_LIGHT_BLUE}**%%%%%${NC}       
+       ${PS_DARK_BLUE}${PS_BOLD}iiiiiii     ${PS_LIGHT_BLUE}*%%%%%%  ${PS_DARK_BLUE}iiiiiii     ${PS_LIGHT_BLUE}%*%%%%%${NC}      
+      ${PS_DARK_BLUE}${PS_BOLD}iiiiiii       ${PS_LIGHT_BLUE}**%%%**${PS_DARK_BLUE}iiiiii       ${PS_LIGHT_BLUE}*%%%%%%%${NC}     
+     ${PS_DARK_BLUE}${PS_BOLD}iiiiiii         ${PS_LIGHT_BLUE}*%%%%*<${PS_DARK_BLUE}iiii         ${PS_LIGHT_BLUE}**%%%%%%${NC}    
+    ${PS_DARK_BLUE}${PS_BOLD}iiiiiii           ${PS_LIGHT_BLUE}%*%%%**${PS_DARK_BLUE}ii           ${PS_LIGHT_BLUE}*%%%%%%%${NC}   
    ${PS_DARK_BLUE}${PS_BOLD}iiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}%%%%%%*%%%%%%%%%%%%%%%%%%%*${NC}  
   ${PS_DARK_BLUE}${PS_BOLD}iiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
  ${PS_DARK_BLUE}${PS_BOLD}iiiiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}

@@ -68,22 +68,22 @@ cat << EOF
   ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
  ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}
                                                    
-${PS_DARK_BLUE}${PS_SKY_BLUE}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
-${PS_DARK_BLUE}${PS_SKY_BLUE}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
-${PS_DARK_BLUE}${PS_SKY_BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
-${PS_DARK_BLUE}${PS_SKY_BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
+${PS_DARK_BLUE}${PS_BOLD}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
+${PS_DARK_BLUE}${PS_BOLD}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
+${PS_DARK_BLUE}${PS_BOLD}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
+${PS_DARK_BLUE}${PS_BOLD}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
 
 =========================================================
-${PS_GREEN}Common Applications Installer Setup Wizard${NC}
+${PS_GREEN}${PS_BOLD}Common Applications Installer Setup Wizard${NC}
 =========================================================
 Non-Commercial use is free of charge, please consult our
 license for commercial use.
 Please use the following link to view the license:
 https://github.com/propstat/server-templates?tab=License-1-ov-file
 =========================================================
-${PS_RED}YOU ARE DOWNLOADING MATERIAL COVERED BY COPYRIGHT AND${NC}
-${PS_RED}LICENSED UNDER THE PROPSTAT LICENSE. IF YOU CONTINUE${NC}
-${PS_RED}YOU AGREE TO THE LICENSE TERMS.${NC}
+${PS_RED}${PS_BOLD}YOU ARE DOWNLOADING MATERIAL COVERED BY COPYRIGHT AND${NC}
+${PS_RED}${PS_BOLD}LICENSED UNDER THE PROPSTAT LICENSE. IF YOU CONTINUE${NC}
+${PS_RED}${PS_BOLD}YOU AGREE TO THE LICENSE TERMS.${NC}
 =========================================================
 EOF
 

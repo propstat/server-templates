@@ -87,6 +87,10 @@ ${PS_RED}${PS_BOLD}YOU AGREE TO THE LICENSE TERMS.${NC}
 
 EOF
 
+# ==========================================
+# License Agreement
+# ==========================================
+
 while true; do
     printf "${PS_GREEN}${PS_BOLD}Do you accept the license terms? [y/n]: ${NC}"
     read -r reply
@@ -96,14 +100,18 @@ while true; do
             break
             ;;
         n|N|no|NO|No)
-            echo "${PS_RED}${PS_BOLD}Installation aborted.${NC}"
+            printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"
             exit 0
             ;;
         *)
-            echo "${PS_RED}${PS_BOLD}Invalid option. Please try again.${NC}"
+            printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please try again.${NC}"
             ;;
     esac
 done
+
+# ==========================================
+# Wizard Start
+# ==========================================
 
 if [ -d "$PROPSTAT_DIR" ]; then
     printf '%s\n' "An existing Propstat installation was found."
@@ -123,6 +131,7 @@ if [ -d "$PROPSTAT_DIR" ]; then
         esac
     done
 else
+    printf '%s\n' "Installer Options:"
     printf '%s\n' "No Propstat installation was found."
     printf '%s\n' "1) Install"
     printf '%s\n' "2) Abort"
@@ -134,7 +143,7 @@ else
         case "$choice" in
             1) ACTION=install; break ;;
             2) printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"; exit 0 ;;
-            *) printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1 or 2.${NC}" ;;
+            *) printf '%s\n' "${PS_GREEN}${PS_BOLD}Invalid option. Please choose 1 or 2.${NC}" ;;
         esac
     done
 fi
@@ -161,7 +170,7 @@ if [ "$ACTION" = remove ]; then
         /usr/bin/timezone \
         /etc/cron.d/propstat-cf-ip
     rm -rf "$REPO_DIR"
-    printf '%s\n' "Propstat installation and its cronjob have been removed."
+    printf '%s\n' "The Propstat Applications and its cronjobs have been removed."
     exit 0
 fi
 
@@ -254,8 +263,13 @@ if [ -n "$PUBLIC_IP" ]; then
         on_no="change-ip"
 else
     printf '%s\n' "Public IP could not be determined."
-    change-ip
+    printf '%s\n' "If this service is accessible from the internet, please configure your network settings now."
 fi
+
+confirm_continue -y \
+    -startmsg="Do you want to configure your network settings?" \
+    on_no="echo 'No settings have been changed.'" \
+    on_yes="change-ip"
 
 # Automatic Updates
 confirm_continue -y \

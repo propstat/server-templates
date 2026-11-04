@@ -113,40 +113,55 @@ done
 # Wizard Start
 # ==========================================
 
+printf '%s\n' "========================================================="
+printf '%s\n' "Installer Options:"
 if [ -d "$PROPSTAT_DIR" ]; then
-    printf '%s\n' "An existing Propstat installation was found."
-    printf '%s\n' "1) Update the installation, overwriting installed files"
-    printf '%s\n' "2) Remove the installation, including its binaries and cronjob"
-    printf '%s\n' "3) Abort"
-
-    while true; do
-        printf "${PS_GREEN}${PS_BOLD}Choose an option (1-3): ${NC}"
-        read -r choice
-
-        case "$choice" in
-            1) ACTION=install; break ;;
-            2) ACTION=remove; break ;;
-            3) printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"; exit 0 ;;
-            *) printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1, 2, or 3.${NC}" ;;
-        esac
-    done
+    HAS_INSTALLATION=1
+    printf '%s\n' \
+        "An existing Propstat installation was found." \
+        "1) Update the installation, overwriting installed files" \
+        "2) Remove the installation, including its binaries and cronjob" \
+        "3) Abort"
 else
-    printf '%s\n' "Installer Options:"
-    printf '%s\n' "No Propstat installation was found."
-    printf '%s\n' "1) Install"
-    printf '%s\n' "2) Abort"
-
-    while true; do
-        printf "${PS_GREEN}${PS_BOLD}Choose an option (1-2): ${NC}"
-        read -r choice
-
-        case "$choice" in
-            1) ACTION=install; break ;;
-            2) printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"; exit 0 ;;
-            *) printf '%s\n' "${PS_GREEN}${PS_BOLD}Invalid option. Please choose 1 or 2.${NC}" ;;
-        esac
-    done
+    HAS_INSTALLATION=0
+    printf '%s\n' \
+        "No Propstat installation was found." \
+        "1) Install" \
+        "2) Abort"
 fi
+printf '%s\n' "========================================================="
+
+while true; do
+    if [ "$HAS_INSTALLATION" -eq 1 ]; then
+        MAX_OPTION=3
+    else
+        MAX_OPTION=2
+    fi
+    printf "${PS_GREEN}${PS_BOLD}Choose an option (1-%s): ${NC}" "$MAX_OPTION"
+    read -r choice
+
+    case "$choice" in
+        1) ACTION=install; break ;;
+        2)
+            if [ "$HAS_INSTALLATION" -eq 1 ]; then
+                ACTION=remove
+                break
+            fi
+            printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"
+            exit 0
+            ;;
+        3)
+            if [ "$HAS_INSTALLATION" -eq 1 ]; then
+                printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"
+                exit 0
+            fi
+            printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1 or 2.${NC}"
+            ;;
+        *)
+            printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1-%s.${NC}" "$MAX_OPTION"
+            ;;
+    esac
+done
 
 if [ "$ACTION" = remove ]; then
     if [ -f /etc/systemd/system/propstat-autoupdate.timer ]; then

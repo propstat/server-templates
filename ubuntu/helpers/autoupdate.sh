@@ -2,7 +2,7 @@
 set -eu
 
 SERVICE_NAME="propstat-autoupdate"
-COMMAND_PATH="/usr/local/bin/autoupdate"
+COMMAND_PATH="/usr/bin/autoupdate"
 SYSTEMD_DIR="/etc/systemd/system"
 SERVICE_FILE="${SYSTEMD_DIR}/${SERVICE_NAME}.service"
 TIMER_FILE="${SYSTEMD_DIR}/${SERVICE_NAME}.timer"

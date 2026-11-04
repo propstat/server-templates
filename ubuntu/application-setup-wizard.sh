@@ -68,10 +68,10 @@ cat << EOF
   ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}%*%%%%%%%%%%%%%%%%%%%%%%%%*${NC}
  ${PS_DARK_BLUE}iiiiiiiiiiiiiiiiiiiiiiii${PS_LIGHT_BLUE}**%%%%%%%%%%%%%%%%%%%%%%%%%${NC}
                                                    
-${PS_DARK_BLUE}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
-${PS_DARK_BLUE}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
-${PS_DARK_BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
-${PS_DARK_BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
+${PS_DARK_BLUE}${PS_SKY_BLUE}iiiii  iiiiii iiiiii  iiiii  iiiiii iiiiii  iii  iiiiii${NC}
+${PS_DARK_BLUE}${PS_SKY_BLUE}ii  ii ii  ii ii  ii  ii  ii  ii     ii    ii ii   ii${NC}  
+${PS_DARK_BLUE}${PS_SKY_BLUE}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${NC}  
+${PS_DARK_BLUE}${PS_SKY_BLUE}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
 
 =========================================================
 ${PS_GREEN}Common Applications Installer Setup Wizard${NC}

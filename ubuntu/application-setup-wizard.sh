@@ -88,7 +88,7 @@ ${PS_RED}${PS_BOLD}YOU AGREE TO THE LICENSE TERMS.${NC}
 EOF
 
 while true; do
-    printf "${PS_GREEN}${PS_BOLD}Do you accept the license terms? [y/n]:${NC}"
+    printf "${PS_GREEN}${PS_BOLD}Do you accept the license terms? [y/n]: ${NC}"
     read -r reply
 
     case "$reply" in
@@ -96,11 +96,11 @@ while true; do
             break
             ;;
         n|N|no|NO|No)
-            echo "Installation aborted."
+            echo "${PS_RED}${PS_BOLD}Installation aborted.${NC}"
             exit 0
             ;;
         *)
-            echo "Invalid option. Please try again."
+            echo "${PS_RED}${PS_BOLD}Invalid option. Please try again.${NC}"
             ;;
     esac
 done
@@ -112,14 +112,14 @@ if [ -d "$PROPSTAT_DIR" ]; then
     printf '%s\n' "3) Abort"
 
     while true; do
-        printf "Choose an option (1-3): "
+        printf "${PS_GREEN}${PS_BOLD}Choose an option (1-3): ${NC}"
         read -r choice
 
         case "$choice" in
             1) ACTION=install; break ;;
             2) ACTION=remove; break ;;
-            3) printf '%s\n' "Process aborted."; exit 0 ;;
-            *) printf '%s\n' "Invalid option. Please choose 1, 2, or 3." ;;
+            3) printf '%s\n' "${PS_RED}${PS_BOLD}Process aborted.${NC}"; exit 0 ;;
+            *) printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1, 2, or 3.${NC}" ;;
         esac
     done
 else
@@ -128,13 +128,13 @@ else
     printf '%s\n' "2) Abort"
 
     while true; do
-        printf "Choose an option (1-2): "
+        printf "${PS_GREEN}${PS_BOLD}Choose an option (1-2): ${NC}"
         read -r choice
 
         case "$choice" in
             1) ACTION=install; break ;;
-            2) printf '%s\n' "Process aborted."; exit 0 ;;
-            *) printf '%s\n' "Invalid option. Please choose 1 or 2." ;;
+            2) printf '%s\n' "${PS_RED}${PS_BOLD}Process aborted.${NC}"; exit 0 ;;
+            *) printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1 or 2.${NC}" ;;
         esac
     done
 fi

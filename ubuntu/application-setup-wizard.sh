@@ -8,12 +8,13 @@ REPO_DIR="/opt/propstat/server-templates"
 SOURCE_DIR="$REPO_DIR/ubuntu/strategies"
 PROPSTAT_DIR="/etc/propstat"
 STRATEGIES_DIR="/etc/propstat/strategies"
+# Terminal colors
 RED=$(printf '\033[0;31m')
 BLUE=$(printf '\033[0;34m')
-CYAN=$(printf '\033[0;36m')
 LIGHT_BLUE=$(printf '\033[0;94m')
+CYAN=$(printf '\033[0;36m')
 GREEN=$(printf '\033[0;32m')
-ORANGE=$(printf '\033[0;33m')
+ORANGE=$(printf '\033[38;5;208m')
 NC=$(printf '\033[0m')
 
 # Check for root privileges

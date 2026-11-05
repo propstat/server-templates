@@ -30,22 +30,48 @@ PS_BOLD=$(printf '\033[1m')
 PS_DIM=$(printf '\033[2m')
 NC=$(printf '\033[0m')
 
+# ==============================================================================
+# PROPSTAT LOGGING
+# ==============================================================================
+
+log_info() {
+    logger -t Propstat -p user.info "$1"
+}
+
+log_notice() {
+    logger -t Propstat -p user.notice "$1"
+}
+
+log_warning() {
+    logger -t Propstat -p user.warning "$1"
+}
+
+log_error() {
+    logger -t Propstat -p user.err "$1"
+}
+
 # Check for root privileges
+
+log_info "Checking for root privileges."
 
 if [ "$(id -u)" -ne 0 ]; then
     if ! command -v sudo >/dev/null 2>&1; then
         printf '%s\n' "Error: sudo is required to install or remove Propstat." >&2
+        log_error "Sudo is required to install or remove Propstat."
         exit 1
     fi
 
     printf '%s\n' "Root privileges are required; requesting sudo." >&2
     if ! sudo -v; then
         printf '%s\n' "Error: Could not authenticate with sudo." >&2
+        log_error "Could not authenticate with sudo."
         exit 1
     fi
 
     exec sudo -n -- "$0" "$@"
 fi
+
+log_info "PROPSTAT Installation Wizard started."
 
 # ==========================================
 # LOGO
@@ -73,22 +99,26 @@ ${PS_DARK_BLUE}${PS_BOLD}iiiii  iiiiii ii  ii  iiiii     ii   ii   iiiiiii  ii${
 ${PS_DARK_BLUE}${PS_BOLD}ii     ii  ii iiiiii  ii     iiiiii  ii   ii   ii  ii${NC}  
 
 =========================================================
-${PS_GREEN}${PS_BOLD}Common Applications Installer Setup Wizard${NC}
+${PS_GREEN}${PS_BOLD}Propstat Installation Wizard${NC}
 =========================================================
+
 Non-Commercial use is free of charge, please consult our
 license for commercial use.
 Please use the following link to view the license:
 https://github.com/propstat/server-templates?tab=License-1-ov-file
+
 =========================================================
+
 ${PS_RED}${PS_BOLD}YOU ARE DOWNLOADING MATERIAL COVERED BY COPYRIGHT AND${NC}
 ${PS_RED}${PS_BOLD}LICENSED UNDER THE PROPSTAT LICENSE. IF YOU CONTINUE${NC}
 ${PS_RED}${PS_BOLD}YOU AGREE TO THE LICENSE TERMS.${NC}
+
 =========================================================
 
 EOF
 
 # ==========================================
-# License Agreement
+# License Agreement Acceptance
 # ==========================================
 
 while true; do
@@ -97,14 +127,18 @@ while true; do
 
     case "$reply" in
         y|Y|yes|YES|Yes)
+            printf '%s\n' "${PS_GREEN}${PS_BOLD}You have accepted the license terms.${NC}"
+            log_info "PROPSTAT License accepted."
             break
             ;;
         n|N|no|NO|No)
             printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"
+            log_error "PROPSTAT License rejected and installation aborted."
             exit 0
             ;;
         *)
             printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please try again.${NC}"
+            log_error "PROPSTAT License wrong option selected."
             ;;
     esac
 done
@@ -113,8 +147,7 @@ done
 # Wizard Start
 # ==========================================
 
-printf '%s\n' "========================================================="
-printf '%s\n' "Installer Options:"
+printf '%s\n' "${PS_GREEN}${PS_BOLD}Installer Options:${NC}"
 if [ -d "$PROPSTAT_DIR" ]; then
     HAS_INSTALLATION=1
     printf '%s\n' \
@@ -147,17 +180,21 @@ while true; do
                 break
             fi
             printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"
+            log_notice "Propstat installation aborted by user."
             exit 0
             ;;
         3)
             if [ "$HAS_INSTALLATION" -eq 1 ]; then
                 printf '%s\n' "${PS_RED}${PS_BOLD}Installation aborted.${NC}"
+                log_notice "Propstat installation aborted by user."
                 exit 0
             fi
             printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1 or 2.${NC}"
+            log_error "Propstat invalid option selected."
             ;;
         *)
             printf '%s\n' "${PS_RED}${PS_BOLD}Invalid option. Please choose 1-%s.${NC}" "$MAX_OPTION"
+            log_error "Propstat invalid option selected."
             ;;
     esac
 done
@@ -173,6 +210,7 @@ if [ "$ACTION" = remove ]; then
         rm -f /etc/systemd/system/propstat-autoupdate.timer \
             /etc/systemd/system/propstat-autoupdate.service
         systemctl daemon-reload
+        log_notice "Propstat Auto Updater removed."
     fi
 
     rm -rf "$PROPSTAT_DIR"
@@ -185,8 +223,31 @@ if [ "$ACTION" = remove ]; then
         /etc/cron.d/propstat-cf-ip
     rm -rf "$REPO_DIR"
     printf '%s\n' "The Propstat Applications and its cronjobs have been removed."
+    log_notice "Propstat Scripts removed."
     exit 0
 fi
+
+cat << EOF
+
+=========================================================
+${PS_GREEN}${PS_BOLD}Dependency Installation${NC}
+=========================================================
+
+Following additional software will be installed to
+automate backups, updates and enable the use
+of some applications.
+
+- git
+- rsync
+- rclone
+- cron
+- dnsutils
+
+=========================================================
+
+EOF
+
+log_info "Installing dependencies for Propstat."
 
 # Install missing dependencies.
 packages=""
@@ -207,6 +268,10 @@ if ! command -v dig >/dev/null 2>&1; then
     packages="$packages dnsutils"
 fi
 
+if ! command -v rclone >/dev/null 2>&1; then
+    packages="$packages rclone"
+fi
+
 if [ -n "$packages" ]; then
     printf '%s\n' "${PS_GREEN}${PS_BOLD}Running apt-get update...${NC}"
     apt-get update
@@ -217,6 +282,7 @@ if [ -n "$packages" ]; then
     printf '%s\n' "${PS_GREEN}${PS_BOLD}$packages${NC}"
     apt-get install -y $packages
     printf '%s\n' "${PS_GREEN}${PS_BOLD}Packages installed successfully.${NC}"
+    log_info "Following Propstat dependencies have been installed ($packages)."
 fi
 
 # Ensure the destination exists.

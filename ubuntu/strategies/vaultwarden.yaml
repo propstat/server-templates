@@ -1,9 +1,11 @@
 %YAML 1.2
 ---
 name: vaultwarden
+
 description: Vaultwarden is a lightweight and self-hosted password manager.
 environmentFile: /etc/propstat/conf/vaultwarden/vaultwarden.env
 iniFile: /etc/propstat/conf/vaultwarden/vaultwarden.ini
+license: https://github.com/dani-garcia/vaultwarden?tab=AGPL-3.0-1-ov-file
 
 installation:
   - dependencies:

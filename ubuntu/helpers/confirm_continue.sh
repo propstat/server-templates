@@ -5,6 +5,7 @@
 confirm_continue() {
     _default=y _quiet=0 _timeout=
     _msg_start=""
+    _msg_prompt=""
     _msg_end="This step has finished."
     _msg_y="Continuing..."  _msg_n="Aborted."
     _msg_t="Timeout reached. Aborting."  _msg_i="Invalid option. Please try again."
@@ -19,6 +20,7 @@ confirm_continue() {
             -n) _default=n ;;
             -t) shift; _timeout=$1 ;;
             -startmsg=*) _msg_start=${1#-startmsg=} ;;
+            msg_prompt=*) _msg_prompt=${1#msg_prompt=} ;;
             -endmsg=*)   _msg_end=${1#-endmsg=} ;;
             msg_yes=*)     _msg_y=${1#msg_yes=} ;;
             msg_no=*)      _msg_n=${1#msg_no=} ;;
@@ -70,12 +72,14 @@ confirm_continue() {
         fi
     fi
 
-    [ "$_default" = y ] && _prompt="Proceed? [Y/n]: " || _prompt="Proceed? [y/N]: "
+    if [ -z "$_msg_prompt" ]; then
+        [ "$_default" = y ] && _msg_prompt="Proceed? [Y/n]: " || _msg_prompt="Proceed? [y/N]: "
+    fi
 
     printf '%s\n' "$_msg_start" >&2
 
     while :; do
-        printf '%s' "$_prompt" >&2
+        printf '%s' "$_msg_prompt" >&2
         _ans=
 
         if [ -n "$_timeout" ]; then

@@ -71,7 +71,7 @@ if [ "$(id -u)" -ne 0 ]; then
     exec sudo -n -- "$0" "$@"
 fi
 
-log_info "PROPSTAT Installation Wizard started."
+log_info "PROPSTAT Installation Wizard launched."
 
 # ==========================================
 # LOGO
@@ -120,6 +120,8 @@ EOF
 # ==========================================
 # License Agreement Acceptance
 # ==========================================
+
+log_info "Requesting acceptance of the Propstat License."
 
 while true; do
     printf "${PS_GREEN}${PS_BOLD}Do you accept the license terms? [y/n]: ${NC}"
@@ -247,7 +249,7 @@ of some applications.
 
 EOF
 
-log_info "Installing dependencies for Propstat."
+log_info "Installing dependencies for Propstat..."
 
 # Install missing dependencies.
 packages=""
